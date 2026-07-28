@@ -23,9 +23,14 @@ export default function Home() {
       });
 
       if (error) {
-        setErrorMessage("Adresse e-mail ou mot de passe incorrect.");
-        return;
-      }
+  console.error("Erreur Supabase :", error);
+
+  setErrorMessage(
+    `${error.message} (code : ${error.status ?? "inconnu"})`
+  );
+
+  return;
+}
 
       if (!data.session) {
         setErrorMessage("Impossible de créer la session utilisateur.");
