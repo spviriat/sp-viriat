@@ -1,10 +1,48 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { FormEvent, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function Home() {
-  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    setErrorMessage("");
+    setIsLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        setErrorMessage("Adresse e-mail ou mot de passe incorrect.");
+        return;
+      }
+
+      if (!data.session) {
+        setErrorMessage("Impossible de créer la session utilisateur.");
+        return;
+      }
+
+      window.location.assign("/dashboard");
+    } catch (err) {
+      console.error(err);
+
+      setErrorMessage(
+        "Une erreur est survenue lors de la connexion. Veuillez réessayer."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <main
@@ -37,70 +75,67 @@ export default function Home() {
           </p>
         </div>
 
-        <form
-          className="mt-8 space-y-5"
-          onSubmit={(event) => event.preventDefault()}
-        >
+        <form className="mt-8 space-y-5" onSubmit={handleLogin}>
           <div>
             <label
-              htmlFor="identifiant"
+              htmlFor="email"
               className="mb-2 block text-sm font-semibold text-slate-700"
             >
-              Identifiant
+              Adresse e-mail
             </label>
 
             <input
-              id="identifiant"
-              name="identifiant"
-              type="text"
-              autoComplete="username"
-              placeholder="Votre identifiant"
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
+              id="email"
+              name="email"
+              type="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Votre adresse e-mail"
+              autoComplete="email"
+              required
+              disabled={isLoading}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100 disabled:bg-slate-100"
             />
           </div>
 
           <div>
             <label
-              htmlFor="mot-de-passe"
+              htmlFor="password"
               className="mb-2 block text-sm font-semibold text-slate-700"
             >
               Mot de passe
             </label>
 
-            <div className="relative">
-              <input
-                id="mot-de-passe"
-                name="mot-de-passe"
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                placeholder="Votre mot de passe"
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 pr-24 text-slate-900 outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-              />
+            <input
+              id="password"
+              name="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Votre mot de passe"
+              autoComplete="current-password"
+              required
+              disabled={isLoading}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100 disabled:bg-slate-100"
+            />
+          </div>
 
-              <button
-                type="button"
-                onClick={() => setShowPassword((value) => !value)}
-                className="absolute inset-y-0 right-3 text-sm font-semibold text-orange-600"
-              >
-                {showPassword ? "Masquer" : "Afficher"}
-              </button>
+          {errorMessage && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              {errorMessage}
             </div>
-          </div>
-
-          <div className="text-right">
-            <button
-              type="button"
-              className="text-sm font-medium text-orange-700 hover:underline"
-            >
-              Mot de passe oublié ?
-            </button>
-          </div>
+          )}
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-red-600 px-4 py-3.5 font-bold text-white shadow-lg transition hover:bg-red-700 active:scale-[0.98]"
+            disabled={isLoading}
+            className="w-full rounded-xl bg-red-600 py-3 font-bold text-white transition hover:bg-red-700 active:bg-red-800 disabled:cursor-not-allowed disabled:bg-red-400"
           >
-            Se connecter
+            {isLoading ? "Connexion en cours..." : "Se connecter"}
           </button>
         </form>
 
@@ -109,7 +144,7 @@ export default function Home() {
             Connexion sécurisée
           </p>
 
-          <p className="mt-1 text-xs leading-5 text-slate-500">
+          <p className="mt-1 text-xs text-slate-500">
             Vos données sont protégées et les échanges sont chiffrés.
           </p>
         </div>
