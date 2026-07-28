@@ -46,7 +46,9 @@ export default function Home() {
 
   return (
     <main
-      style={{ backgroundImage: "url('/caserne.jpg')" }}
+  className="relative flex min-h-screen items-center justify-center bg-cover bg-center px-4 py-8"
+  style={{ backgroundImage: "url('/caserne.jpg')" }}
+>
     >
       <div className="absolute inset-0 bg-black/50" />
 
