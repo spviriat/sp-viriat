@@ -7,6 +7,7 @@ export type Profile = {
   telephone: string | null;
   avatar_url: string | null;
   role: string;
+  access_role: "user" | "admin";
   theme: string;
 
   matricule: string | null;

@@ -94,18 +94,19 @@ export default function DashboardPage() {
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select(`
-  id,
-  first_name,
-  last_name,
-  grade,
-  fonction,
-  telephone,
-  avatar_url,
-  role,
-  theme,
-  matricule,
-  status
-`)
+          id,
+          first_name,
+          last_name,
+          grade,
+          fonction,
+          telephone,
+          avatar_url,
+          role,
+          access_role,
+          theme,
+          matricule,
+          status
+        `)
         .eq("id", session.user.id)
         .single();
 
@@ -115,7 +116,7 @@ export default function DashboardPage() {
           profileError
         );
       } else {
-        setProfile(profileData);
+        setProfile(profileData as Profile);
       }
 
       setIsCheckingSession(false);
@@ -168,15 +169,13 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-slate-100 pb-28 text-slate-950 dark:bg-slate-950 dark:text-white lg:pb-10">
       <DashboardHeader
-  profile={profile}
-  isLoggingOut={isLoggingOut}
-  onLogout={handleLogout}
-/>
-    
+        profile={profile}
+        isLoggingOut={isLoggingOut}
+        onLogout={handleLogout}
+      />
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <WelcomeSection profile={profile} />
-
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.8fr)]">
           <div className="space-y-6">
@@ -241,8 +240,12 @@ export default function DashboardPage() {
                 </p>
 
                 <p className="text-sm font-medium capitalize text-red-600">
-                  {profile?.role || "Utilisateur"}
-                </p>
+  {profile?.role || "Utilisateur"}
+</p>
+
+<p className="text-xs text-slate-400">
+  access_role : {profile?.access_role}
+</p>
 
                 {profile?.grade && (
                   <p className="text-sm text-slate-600 dark:text-slate-300">
@@ -250,6 +253,11 @@ export default function DashboardPage() {
                   </p>
                 )}
 
+{profile?.access_role === "admin" && (
+  <p className="text-green-500 font-bold">
+    ✅ Je suis administrateur
+  </p>
+)}
                 {profile?.fonction && (
                   <p className="text-sm text-slate-500">
                     {profile.fonction}
@@ -257,11 +265,21 @@ export default function DashboardPage() {
                 )}
               </div>
 
+              {profile?.access_role === "admin" && (
+                <Link
+                  href="/dashboard/admin"
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 font-bold text-white transition hover:bg-slate-800 active:scale-[0.98] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+                >
+                  <span>⚙️</span>
+                  <span>Administration</span>
+                </Link>
+              )}
+
               <button
                 type="button"
                 onClick={handleLogout}
                 disabled={isLoggingOut}
-                className="mt-5 w-full rounded-2xl border border-red-200 px-5 py-3 font-bold text-red-600 transition hover:bg-red-50 active:scale-[0.98] disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950/30 sm:hidden"
+                className="mt-3 w-full rounded-2xl border border-red-200 px-5 py-3 font-bold text-red-600 transition hover:bg-red-50 active:scale-[0.98] disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950/30 sm:hidden"
               >
                 {isLoggingOut ? "Déconnexion..." : "Se déconnecter"}
               </button>
