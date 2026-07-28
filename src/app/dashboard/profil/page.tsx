@@ -37,22 +37,23 @@ export default function ProfilePage() {
       setEmail(session.user.email ?? "");
 
       const { data, error } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          first_name,
-          last_name,
-          grade,
-          fonction,
-          telephone,
-          avatar_url,
-          role,
-          theme,
-          matricule,
-          status
-        `)
-        .eq("id", session.user.id)
-        .single();
+  .from("profiles")
+  .select(`
+    id,
+    first_name,
+    last_name,
+    grade,
+    fonction,
+    telephone,
+    avatar_url,
+    role,
+    access_role,
+    theme,
+    matricule,
+    status
+  `)
+  .eq("id", session.user.id)
+  .single();
 
       if (error) {
         console.error(
@@ -113,28 +114,23 @@ export default function ProfilePage() {
     }
 
     const { data, error } = await supabase
-      .from("profiles")
-      .update({
-        telephone: values.telephone,
-        matricule: values.matricule,
-        avatar_url: avatarUrl,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", profile.id)
-      .select(`
-        id,
-        first_name,
-        last_name,
-        grade,
-        fonction,
-        telephone,
-        avatar_url,
-        role,
-        theme,
-        matricule,
-        status
-      `)
-      .single();
+  .from("profiles")
+  .select(`
+    id,
+    first_name,
+    last_name,
+    grade,
+    fonction,
+    telephone,
+    avatar_url,
+    role,
+    access_role,
+    theme,
+    matricule,
+    status
+  `)
+  .eq("id", profile.id)
+  .single();
 
     if (error) {
       console.error(
@@ -179,26 +175,23 @@ export default function ProfilePage() {
     }
 
     const { data, error: updateError } = await supabase
-      .from("profiles")
-      .update({
-        avatar_url: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", profile.id)
-      .select(`
-        id,
-        first_name,
-        last_name,
-        grade,
-        fonction,
-        telephone,
-        avatar_url,
-        role,
-        theme,
-        matricule,
-        status
-      `)
-      .single();
+  .from("profiles")
+  .select(`
+    id,
+    first_name,
+    last_name,
+    grade,
+    fonction,
+    telephone,
+    avatar_url,
+    role,
+    access_role,
+    theme,
+    matricule,
+    status
+  `)
+  .eq("id", profile.id)
+  .single();
 
     if (updateError) {
       console.error(
