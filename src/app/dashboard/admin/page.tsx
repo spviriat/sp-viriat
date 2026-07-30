@@ -7,6 +7,12 @@ import { supabase } from "@/lib/supabase";
 
 type AccessRole = "user" | "admin";
 
+type BusinessRole = {
+  id: number;
+  code: string;
+  label: string;
+};
+
 type UserProfile = {
   id: string;
   first_name: string;
@@ -17,13 +23,81 @@ type UserProfile = {
   role: string | null;
   access_role: AccessRole;
   status: string | null;
+  business_roles: BusinessRole[];
 };
+
+type ProfileBusinessRole = {
+  profile_id: string;
+  business_role_id: number;
+};
+
+type BusinessRoleCategory = {
+  title: string;
+  icon: string;
+  codes: string[];
+};
+
+const BUSINESS_ROLE_CATEGORIES: BusinessRoleCategory[] = [
+  {
+    title: "Commandement",
+    icon: "🚒",
+    codes: ["chef_centre", "adjoint_chef_centre"],
+  },
+  {
+    title: "Responsabilités opérationnelles",
+    icon: "🧰",
+    codes: [
+      "responsable_pharmacie",
+      "responsable_habillement",
+      "responsable_materiel",
+    ],
+  },
+  {
+    title: "Corps",
+    icon: "👥",
+    codes: ["sapeur_pompier", "observateur"],
+  },
+  {
+    title: "Amicale",
+    icon: "🤝",
+    codes: [
+      "president_amicale",
+      "president_amicale_anciens",
+      "membre_bureau",
+      "amicaliste",
+    ],
+  },
+];
+
+const BUSINESS_ROLE_ORDER = BUSINESS_ROLE_CATEGORIES.flatMap(
+  (category) => category.codes
+);
+
+const sortBusinessRoles = (roles: BusinessRole[]) =>
+  [...roles].sort((firstRole, secondRole) => {
+    const firstIndex = BUSINESS_ROLE_ORDER.indexOf(firstRole.code);
+    const secondIndex = BUSINESS_ROLE_ORDER.indexOf(secondRole.code);
+
+    const safeFirstIndex = firstIndex === -1 ? Number.MAX_SAFE_INTEGER : firstIndex;
+    const safeSecondIndex =
+      secondIndex === -1 ? Number.MAX_SAFE_INTEGER : secondIndex;
+
+    if (safeFirstIndex !== safeSecondIndex) {
+      return safeFirstIndex - safeSecondIndex;
+    }
+
+    return firstRole.label.localeCompare(secondRole.label, "fr");
+  });
 
 export default function AdminPage() {
   const router = useRouter();
 
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [businessRoles, setBusinessRoles] = useState<BusinessRole[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [selectedBusinessRoleIds, setSelectedBusinessRoleIds] = useState<
+    number[]
+  >([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -57,35 +131,101 @@ export default function AdminPage() {
         return;
       }
 
-      const { data: profiles, error: usersError } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          first_name,
-          last_name,
-          matricule,
-          grade,
-          phone,
-          role,
-          access_role,
-          status
-        `)
-        .order("last_name", { ascending: true })
-        .order("first_name", { ascending: true });
+      const [profilesResult, businessRolesResult, assignmentsResult] =
+        await Promise.all([
+          supabase
+            .from("profiles")
+            .select(`
+              id,
+              first_name,
+              last_name,
+              matricule,
+              grade,
+              phone,
+              role,
+              access_role,
+              status
+            `)
+            .order("last_name", { ascending: true })
+            .order("first_name", { ascending: true }),
+          supabase.from("business_roles").select("id, code, label"),
+          supabase
+            .from("profile_business_roles")
+            .select("profile_id, business_role_id"),
+        ]);
 
-      if (usersError) {
+      if (profilesResult.error) {
         console.error(
           "Erreur lors de la récupération des utilisateurs :",
-          usersError
+          profilesResult.error
         );
 
         setErrorMessage(
           "Impossible de récupérer la liste des utilisateurs."
         );
-      } else {
-        setUsers((profiles ?? []) as UserProfile[]);
+        setIsLoading(false);
+        return;
       }
 
+      if (businessRolesResult.error) {
+        console.error(
+          "Erreur lors de la récupération des rôles métier :",
+          businessRolesResult.error
+        );
+
+        setErrorMessage("Impossible de récupérer les rôles métier.");
+        setIsLoading(false);
+        return;
+      }
+
+      if (assignmentsResult.error) {
+        console.error(
+          "Erreur lors de la récupération des attributions de rôles :",
+          assignmentsResult.error
+        );
+
+        setErrorMessage(
+          "Impossible de récupérer les rôles attribués aux utilisateurs."
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      const loadedBusinessRoles = sortBusinessRoles(
+        (businessRolesResult.data ?? []) as BusinessRole[]
+      );
+      const assignments = (assignmentsResult.data ?? []) as ProfileBusinessRole[];
+
+      const rolesById = new Map(
+        loadedBusinessRoles.map((businessRole) => [
+          businessRole.id,
+          businessRole,
+        ])
+      );
+
+      const rolesByProfileId = new Map<string, BusinessRole[]>();
+
+      assignments.forEach((assignment) => {
+        const businessRole = rolesById.get(assignment.business_role_id);
+
+        if (!businessRole) {
+          return;
+        }
+
+        const currentRoles = rolesByProfileId.get(assignment.profile_id) ?? [];
+        currentRoles.push(businessRole);
+        rolesByProfileId.set(assignment.profile_id, currentRoles);
+      });
+
+      const loadedUsers = (profilesResult.data ?? []).map((profile) => ({
+        ...profile,
+        business_roles: sortBusinessRoles(
+          rolesByProfileId.get(profile.id) ?? []
+        ),
+      })) as UserProfile[];
+
+      setBusinessRoles(loadedBusinessRoles);
+      setUsers(loadedUsers);
       setIsLoading(false);
     };
 
@@ -95,7 +235,13 @@ export default function AdminPage() {
   const openEditDialog = (user: UserProfile) => {
     setErrorMessage("");
     setSuccessMessage("");
-    setSelectedUser({ ...user });
+    setSelectedUser({
+      ...user,
+      business_roles: [...user.business_roles],
+    });
+    setSelectedBusinessRoleIds(
+      user.business_roles.map((businessRole) => businessRole.id)
+    );
   };
 
   const closeEditDialog = () => {
@@ -104,6 +250,16 @@ export default function AdminPage() {
     }
 
     setSelectedUser(null);
+    setSelectedBusinessRoleIds([]);
+    setErrorMessage("");
+  };
+
+  const toggleBusinessRole = (businessRoleId: number) => {
+    setSelectedBusinessRoleIds((currentRoleIds) =>
+      currentRoleIds.includes(businessRoleId)
+        ? currentRoleIds.filter((roleId) => roleId !== businessRoleId)
+        : [...currentRoleIds, businessRoleId]
+    );
   };
 
   const handleSaveUser = async () => {
@@ -123,7 +279,11 @@ export default function AdminPage() {
     setErrorMessage("");
     setSuccessMessage("");
 
-    const { data: updatedProfile, error } = await supabase
+    console.time("saveUser");
+
+    console.time("1-update-profile");
+
+    const { data: updatedProfile, error: profileUpdateError } = await supabase
       .from("profiles")
       .update({
         first_name: firstName,
@@ -147,40 +307,123 @@ export default function AdminPage() {
       `)
       .single();
 
-    if (error) {
+    console.timeEnd("1-update-profile");
+
+    if (profileUpdateError) {
       console.error(
         "Erreur lors de la modification de l'utilisateur :",
-        error
+        profileUpdateError
       );
 
-      setErrorMessage(
-        "Les modifications n'ont pas pu être enregistrées."
-      );
-
+      setErrorMessage("Les modifications n'ont pas pu être enregistrées.");
+      console.timeEnd("saveUser");
       setIsSaving(false);
       return;
     }
 
-    const savedUser = updatedProfile as UserProfile;
-
-    setUsers((currentUsers) =>
-      currentUsers
-        .map((user) =>
-          user.id === savedUser.id ? savedUser : user
-        )
-        .sort((firstUser, secondUser) => {
-          const firstFullName =
-            `${firstUser.last_name} ${firstUser.first_name}`.trim();
-
-          const secondFullName =
-            `${secondUser.last_name} ${secondUser.first_name}`.trim();
-
-          return firstFullName.localeCompare(secondFullName, "fr");
-        })
+    const previousRoleIds = selectedUser.business_roles.map(
+      (businessRole) => businessRole.id
     );
 
+    const roleIdsToAdd = selectedBusinessRoleIds.filter(
+      (roleId) => !previousRoleIds.includes(roleId)
+    );
+
+    const roleIdsToDelete = previousRoleIds.filter(
+      (roleId) => !selectedBusinessRoleIds.includes(roleId)
+    );
+
+    try {
+      const roleOperations: PromiseLike<void>[] = [];
+
+      if (roleIdsToDelete.length > 0) {
+        console.time("2-delete-roles");
+
+        roleOperations.push(
+          supabase
+            .from("profile_business_roles")
+            .delete()
+            .eq("profile_id", selectedUser.id)
+            .in("business_role_id", roleIdsToDelete)
+            .then(({ error }) => {
+              console.timeEnd("2-delete-roles");
+
+              if (error) {
+                throw error;
+              }
+            })
+        );
+      }
+
+      if (roleIdsToAdd.length > 0) {
+        console.time("3-insert-roles");
+
+        roleOperations.push(
+          supabase
+            .from("profile_business_roles")
+            .insert(
+              roleIdsToAdd.map((businessRoleId) => ({
+                profile_id: selectedUser.id,
+                business_role_id: businessRoleId,
+              }))
+            )
+            .then(({ error }) => {
+              console.timeEnd("3-insert-roles");
+
+              if (error) {
+                throw error;
+              }
+            })
+        );
+      }
+
+      await Promise.all(roleOperations);
+    } catch (roleError) {
+      console.error(
+        "Erreur lors de la mise à jour des rôles métier :",
+        roleError
+      );
+
+      setErrorMessage(
+        "Le profil a été modifié, mais les rôles métier n'ont pas pu être enregistrés."
+      );
+      console.timeEnd("saveUser");
+      setIsSaving(false);
+      return;
+    }
+
+    const savedBusinessRoles = sortBusinessRoles(
+      businessRoles.filter((businessRole) =>
+        selectedBusinessRoleIds.includes(businessRole.id)
+      )
+    );
+
+    const savedUser = {
+      ...(updatedProfile as Omit<UserProfile, "business_roles">),
+      business_roles: savedBusinessRoles,
+    } as UserProfile;
+
+    console.time("4-setUsers");
+
+setUsers((currentUsers) =>
+  currentUsers
+    .map((user) => (user.id === savedUser.id ? savedUser : user))
+    .sort((firstUser, secondUser) => {
+      const firstFullName =
+        `${firstUser.last_name} ${firstUser.first_name}`.trim();
+      const secondFullName =
+        `${secondUser.last_name} ${secondUser.first_name}`.trim();
+
+      return firstFullName.localeCompare(secondFullName, "fr");
+    })
+);
+
+console.timeEnd("4-setUsers");
+
     setSelectedUser(null);
+    setSelectedBusinessRoleIds([]);
     setSuccessMessage("L'utilisateur a été modifié avec succès.");
+    console.timeEnd("saveUser");
     setIsSaving(false);
   };
 
@@ -212,7 +455,8 @@ export default function AdminPage() {
             </h1>
 
             <p className="mt-2 text-slate-600 dark:text-slate-400">
-              Gère les informations et les droits d&apos;accès des utilisateurs.
+              Gère les informations, les droits d&apos;accès et les rôles métier
+              des utilisateurs.
             </p>
           </div>
 
@@ -238,10 +482,7 @@ export default function AdminPage() {
 
         <section className="mt-8 overflow-hidden rounded-3xl bg-white shadow-sm dark:bg-slate-900">
           <div className="border-b border-slate-200 px-5 py-5 dark:border-slate-800 sm:px-6">
-
-                      <h2 className="text-xl font-extrabold">
-              Utilisateurs
-            </h2>
+            <h2 className="text-xl font-extrabold">Utilisateurs</h2>
 
             <p className="mt-1 text-sm text-slate-500">
               {users.length} utilisateur{users.length > 1 ? "s" : ""}
@@ -280,18 +521,25 @@ export default function AdminPage() {
                             </p>
                           )}
 
-                          {user.phone && (
-                            <p>
-                              Téléphone : {user.phone}
-                            </p>
-                          )}
+                          {user.phone && <p>Téléphone : {user.phone}</p>}
                         </div>
                       )}
 
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {user.role || "Rôle métier non renseigné"}
-                        </span>
+                        {user.business_roles.length > 0 ? (
+                          user.business_roles.map((businessRole) => (
+                            <span
+                              key={businessRole.id}
+                              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                            >
+                              {businessRole.label}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                            Aucun rôle métier
+                          </span>
+                        )}
 
                         <span
                           className={
@@ -353,7 +601,8 @@ export default function AdminPage() {
                 </h2>
 
                 <p className="mt-2 text-slate-500 dark:text-slate-400">
-                  Modifie ses informations et son niveau d&apos;accès.
+                  Modifie ses informations, son niveau d&apos;accès et ses rôles
+                  métier.
                 </p>
               </div>
 
@@ -375,9 +624,7 @@ export default function AdminPage() {
             )}
 
             <div className="mt-8">
-              <h3 className="text-lg font-black">
-                Informations personnelles
-              </h3>
+              <h3 className="text-lg font-black">Informations personnelles</h3>
 
               <div className="mt-4 grid gap-5 sm:grid-cols-2">
                 <label className="block">
@@ -481,9 +728,7 @@ export default function AdminPage() {
             </div>
 
             <div className="mt-8 border-t border-slate-200 pt-8 dark:border-slate-800">
-              <h3 className="text-lg font-black">
-                Droits d&apos;accès
-              </h3>
+              <h3 className="text-lg font-black">Droits d&apos;accès</h3>
 
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Un administrateur peut accéder à la gestion de l&apos;application.
@@ -505,9 +750,7 @@ export default function AdminPage() {
                       : "rounded-2xl border-2 border-slate-200 px-5 py-4 text-left text-slate-700 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
                   }
                 >
-                  <span className="block font-black">
-                    Utilisateur
-                  </span>
+                  <span className="block font-black">Utilisateur</span>
 
                   <span className="mt-1 block text-sm opacity-80">
                     Accès normal à l&apos;application.
@@ -529,14 +772,83 @@ export default function AdminPage() {
                       : "rounded-2xl border-2 border-slate-200 px-5 py-4 text-left text-slate-700 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
                   }
                 >
-                  <span className="block font-black">
-                    Administrateur
-                  </span>
+                  <span className="block font-black">Administrateur</span>
 
                   <span className="mt-1 block text-sm opacity-80">
                     Accès à la gestion des utilisateurs.
                   </span>
                 </button>
+              </div>
+            </div>
+
+            <div className="mt-8 border-t border-slate-200 pt-8 dark:border-slate-800">
+              <h3 className="text-lg font-black">Rôles métier</h3>
+
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Un utilisateur peut posséder plusieurs rôles métier. Aucun rôle
+                n&apos;est attribué par défaut et Observateur est cumulable avec
+                Sapeur-Pompier.
+              </p>
+
+              <div className="mt-5 space-y-6">
+                {BUSINESS_ROLE_CATEGORIES.map((category) => {
+                  const categoryRoles = category.codes
+                    .map((code) =>
+                      businessRoles.find(
+                        (businessRole) => businessRole.code === code
+                      )
+                    )
+                    .filter(
+                      (businessRole): businessRole is BusinessRole =>
+                        Boolean(businessRole)
+                    );
+
+                  if (categoryRoles.length === 0) {
+                    return null;
+                  }
+
+                  return (
+                    <section key={category.title}>
+                      <h4 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <span aria-hidden="true">{category.icon}</span>
+                        {category.title}
+                      </h4>
+
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {categoryRoles.map((businessRole) => {
+                          const isSelected = selectedBusinessRoleIds.includes(
+                            businessRole.id
+                          );
+
+                          return (
+                            <label
+                              key={businessRole.id}
+                              className={
+                                isSelected
+                                  ? "flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-red-600 bg-red-50 px-4 py-3 text-red-700 transition dark:bg-red-950/30 dark:text-red-300"
+                                  : "flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-slate-200 px-4 py-3 text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
+                              }
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() =>
+                                  toggleBusinessRole(businessRole.id)
+                                }
+                                disabled={isSaving}
+                                className="h-5 w-5 shrink-0 accent-red-600 disabled:cursor-not-allowed"
+                              />
+
+                              <span className="font-bold">
+                                {businessRole.label}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })}
               </div>
             </div>
 
