@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
@@ -18,9 +18,30 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState("");
+
   const [message, setMessage] = useState<string | null>(null);
+
+  /*
+   * =====================================================
+   * MOT DE PASSE
+   * =====================================================
+   */
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+
+  const [isChangingPassword, setIsChangingPassword] =
+    useState(false);
+
+  const [passwordError, setPasswordError] =
+    useState<string | null>(null);
+
+  const [passwordSuccess, setPasswordSuccess] =
+    useState<string | null>(null);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -37,23 +58,23 @@ export default function ProfilePage() {
       setEmail(session.user.email ?? "");
 
       const { data, error } = await supabase
-  .from("profiles")
-  .select(`
-    id,
-    first_name,
-    last_name,
-    grade,
-    fonction,
-    telephone,
-    avatar_url,
-    role,
-    access_role,
-    theme,
-    matricule,
-    status
-  `)
-  .eq("id", session.user.id)
-  .single();
+        .from("profiles")
+        .select(`
+          id,
+          first_name,
+          last_name,
+          grade,
+          fonction,
+          telephone,
+          avatar_url,
+          role,
+          access_role,
+          theme,
+          matricule,
+          status
+        `)
+        .eq("id", session.user.id)
+        .single();
 
       if (error) {
         console.error(
@@ -69,6 +90,12 @@ export default function ProfilePage() {
 
     void loadProfile();
   }, [router]);
+
+  /*
+   * =====================================================
+   * MODIFICATION DU PROFIL
+   * =====================================================
+   */
 
   const handleSaveProfile = async (
     values: EditableProfileFields
@@ -114,23 +141,23 @@ export default function ProfilePage() {
     }
 
     const { data, error } = await supabase
-  .from("profiles")
-  .select(`
-    id,
-    first_name,
-    last_name,
-    grade,
-    fonction,
-    telephone,
-    avatar_url,
-    role,
-    access_role,
-    theme,
-    matricule,
-    status
-  `)
-  .eq("id", profile.id)
-  .single();
+      .from("profiles")
+      .select(`
+        id,
+        first_name,
+        last_name,
+        grade,
+        fonction,
+        telephone,
+        avatar_url,
+        role,
+        access_role,
+        theme,
+        matricule,
+        status
+      `)
+      .eq("id", profile.id)
+      .single();
 
     if (error) {
       console.error(
@@ -138,7 +165,10 @@ export default function ProfilePage() {
         error
       );
 
-      setMessage("Impossible d’enregistrer les modifications.");
+      setMessage(
+        "Impossible d’enregistrer les modifications."
+      );
+
       setIsSaving(false);
       return;
     }
@@ -148,6 +178,12 @@ export default function ProfilePage() {
     setMessage("Profil mis à jour avec succès.");
     setIsSaving(false);
   };
+
+  /*
+   * =====================================================
+   * SUPPRESSION DE L'AVATAR
+   * =====================================================
+   */
 
   const handleDeleteAvatar = async () => {
     if (!profile || isSaving) {
@@ -169,29 +205,32 @@ export default function ProfilePage() {
         deleteError
       );
 
-      setMessage("Impossible de supprimer la photo.");
+      setMessage(
+        "Impossible de supprimer la photo."
+      );
+
       setIsSaving(false);
       return;
     }
 
     const { data, error: updateError } = await supabase
-  .from("profiles")
-  .select(`
-    id,
-    first_name,
-    last_name,
-    grade,
-    fonction,
-    telephone,
-    avatar_url,
-    role,
-    access_role,
-    theme,
-    matricule,
-    status
-  `)
-  .eq("id", profile.id)
-  .single();
+      .from("profiles")
+      .select(`
+        id,
+        first_name,
+        last_name,
+        grade,
+        fonction,
+        telephone,
+        avatar_url,
+        role,
+        access_role,
+        theme,
+        matricule,
+        status
+      `)
+      .eq("id", profile.id)
+      .single();
 
     if (updateError) {
       console.error(
@@ -202,6 +241,7 @@ export default function ProfilePage() {
       setMessage(
         "La photo a été supprimée, mais le profil n’a pas pu être mis à jour."
       );
+
       setIsSaving(false);
       return;
     }
@@ -210,6 +250,135 @@ export default function ProfilePage() {
     setIsEditOpen(false);
     setMessage("Photo de profil supprimée.");
     setIsSaving(false);
+  };
+
+  /*
+   * =====================================================
+   * MODIFICATION DU MOT DE PASSE
+   * =====================================================
+   */
+
+  const handleChangePassword = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
+    if (isChangingPassword) {
+      return;
+    }
+
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (
+      !currentPassword ||
+      !newPassword ||
+      !confirmNewPassword
+    ) {
+      setPasswordError(
+        "Tous les champs sont obligatoires."
+      );
+
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError(
+        "Le nouveau mot de passe doit contenir au moins 8 caractères."
+      );
+
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError(
+        "Les deux nouveaux mots de passe ne correspondent pas."
+      );
+
+      return;
+    }
+
+    if (currentPassword === newPassword) {
+      setPasswordError(
+        "Le nouveau mot de passe doit être différent de l’ancien."
+      );
+
+      return;
+    }
+
+    if (!email) {
+      setPasswordError(
+        "Impossible de déterminer votre adresse e-mail."
+      );
+
+      return;
+    }
+
+    setIsChangingPassword(true);
+
+    try {
+      /*
+       * Vérification de l'ancien mot de passe.
+       */
+
+      const {
+        error: verificationError,
+      } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+      });
+
+      if (verificationError) {
+        setPasswordError(
+          "Votre mot de passe actuel est incorrect."
+        );
+
+        return;
+      }
+
+      /*
+       * Enregistrement du nouveau mot de passe.
+       */
+
+      const {
+        error: passwordUpdateError,
+      } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (passwordUpdateError) {
+        console.error(
+          "Erreur lors du changement de mot de passe :",
+          passwordUpdateError
+        );
+
+        setPasswordError(
+          passwordUpdateError.message ||
+            "Impossible de modifier votre mot de passe."
+        );
+
+        return;
+      }
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+
+      setPasswordSuccess(
+        "Votre mot de passe a été modifié avec succès."
+      );
+    } catch (error) {
+      console.error(
+        "Erreur inattendue lors du changement de mot de passe :",
+        error
+      );
+
+      setPasswordError(
+        "Une erreur inattendue est survenue. Veuillez réessayer."
+      );
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   if (isLoading) {
@@ -247,7 +416,146 @@ export default function ProfilePage() {
           }}
         />
 
-        <ProfileInfo profile={profile} email={email} />
+        <ProfileInfo
+          profile={profile}
+          email={email}
+        />
+
+        {/* =================================================
+            SÉCURITÉ
+        ================================================= */}
+
+        <section className="overflow-hidden rounded-3xl bg-white shadow-sm dark:bg-slate-900">
+          <div className="border-b border-slate-200 px-5 py-5 dark:border-slate-800 sm:px-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-100 text-xl dark:bg-red-950/40">
+                🔐
+              </div>
+
+              <div>
+                <h2 className="text-xl font-black">
+                  Sécurité
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Gérez votre mot de passe de connexion.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <form
+            onSubmit={handleChangePassword}
+            className="p-5 sm:p-6"
+          >
+            {passwordError && (
+              <div
+                role="alert"
+                className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+              >
+                {passwordError}
+              </div>
+            )}
+
+            {passwordSuccess && (
+              <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+                ✅ {passwordSuccess}
+              </div>
+            )}
+
+            <div className="grid gap-5">
+              <label className="block">
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                  Mot de passe actuel
+                </span>
+
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(event) => {
+                    setCurrentPassword(
+                      event.target.value
+                    );
+
+                    setPasswordError(null);
+                    setPasswordSuccess(null);
+                  }}
+                  disabled={isChangingPassword}
+                  autoComplete="current-password"
+                  placeholder="Votre mot de passe actuel"
+                  className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-red-950"
+                />
+              </label>
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    Nouveau mot de passe
+                  </span>
+
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => {
+                      setNewPassword(
+                        event.target.value
+                      );
+
+                      setPasswordError(null);
+                      setPasswordSuccess(null);
+                    }}
+                    disabled={isChangingPassword}
+                    autoComplete="new-password"
+                    minLength={8}
+                    placeholder="Au moins 8 caractères"
+                    className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-red-950"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    Confirmer
+                  </span>
+
+                  <input
+                    type="password"
+                    value={confirmNewPassword}
+                    onChange={(event) => {
+                      setConfirmNewPassword(
+                        event.target.value
+                      );
+
+                      setPasswordError(null);
+                      setPasswordSuccess(null);
+                    }}
+                    disabled={isChangingPassword}
+                    autoComplete="new-password"
+                    minLength={8}
+                    placeholder="Confirmez le nouveau mot de passe"
+                    className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-red-950"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+              Le nouveau mot de passe doit contenir au
+              minimum <strong>8 caractères</strong>.
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="submit"
+                disabled={isChangingPassword}
+                className="w-full rounded-2xl bg-red-600 px-6 py-3 font-bold text-white transition hover:bg-red-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              >
+                {isChangingPassword
+                  ? "Modification..."
+                  : "Modifier mon mot de passe"}
+              </button>
+            </div>
+          </form>
+        </section>
       </div>
 
       <EditProfileDialog

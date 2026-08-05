@@ -3,13 +3,31 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
 import { supabase } from "@/lib/supabase";
 import type { Profile } from "@/types/profile";
+
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import WelcomeSection from "@/components/dashboard/WelcomeSection";
 import QuickAccess from "@/components/dashboard/QuickAccess";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
 import NextDuty from "@/components/dashboard/NextDuty";
+
+type BusinessRoleAssignment = {
+  business_roles:
+    | {
+        code: string;
+      }
+    | {
+        code: string;
+      }[]
+    | null;
+};
+
+const USER_MANAGEMENT_ROLES = [
+  "chef_centre",
+  "adjoint_chef_centre",
+];
 
 const quickAccessItems = [
   {
@@ -72,12 +90,41 @@ const upcomingEvents = [
   },
 ];
 
+function getBusinessRoleCode(
+  assignment: BusinessRoleAssignment
+): string | null {
+  if (!assignment.business_roles) {
+    return null;
+  }
+
+  if (Array.isArray(assignment.business_roles)) {
+    return assignment.business_roles[0]?.code ?? null;
+  }
+
+  return assignment.business_roles.code;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
 
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   const [profile, setProfile] = useState<Profile | null>(null);
+
+  /*
+   * Autorise l'accès à la gestion des utilisateurs pour :
+   *
+   * - Administrateur
+   * - Chef de centre
+   * - Adjoint chef de centre
+   */
+
+  const [canManageUsers, setCanManageUsers] = useState(false);
+
+  const [managementLabel, setManagementLabel] = useState<
+    "Administrateur" | "Chef de centre" | "Adjoint chef de centre" | null
+  >(null);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -91,51 +138,182 @@ export default function DashboardPage() {
         return;
       }
 
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          first_name,
-          last_name,
-          grade,
-          fonction,
-          telephone,
-          avatar_url,
-          role,
-          access_role,
-          theme,
-          matricule,
-          status
-        `)
-        .eq("id", session.user.id)
-        .single();
+      /*
+       * =====================================================
+       * 1. Récupération du profil
+       * =====================================================
+       */
 
-      if (profileError) {
+      const { data: profileData, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select(`
+            id,
+            first_name,
+            last_name,
+            grade,
+            fonction,
+            telephone,
+            avatar_url,
+            role,
+            access_role,
+            theme,
+            matricule,
+            status
+          `)
+          .eq("id", session.user.id)
+          .single();
+
+      if (profileError || !profileData) {
         console.error(
           "Erreur lors de la récupération du profil :",
           profileError
         );
-      } else {
-        setProfile(profileData as Profile);
+
+        await supabase.auth.signOut({
+          scope: "local",
+        });
+
+        router.replace("/");
+        return;
       }
 
+      /*
+       * =====================================================
+       * 2. Première connexion
+       * =====================================================
+       */
+
+      if (
+        profileData.status ===
+        "temporary_password"
+      ) {
+        router.replace(
+          "/auth/complete-profile"
+        );
+
+        return;
+      }
+
+      /*
+       * =====================================================
+       * 3. Récupération des rôles métier
+       * =====================================================
+       */
+
+      const {
+        data: businessRoleAssignments,
+        error: businessRoleError,
+      } = await supabase
+        .from("profile_business_roles")
+        .select(`
+          business_roles!inner (
+            code
+          )
+        `)
+        .eq(
+          "profile_id",
+          session.user.id
+        );
+
+      if (businessRoleError) {
+        console.error(
+          "Erreur lors de la récupération des rôles métier :",
+          businessRoleError
+        );
+      }
+
+      const businessRoleCodes = (
+        (businessRoleAssignments ??
+          []) as BusinessRoleAssignment[]
+      )
+        .map(getBusinessRoleCode)
+        .filter(
+          (code): code is string =>
+            Boolean(code)
+        );
+
+      /*
+       * =====================================================
+       * 4. Calcul des droits de gestion
+       * =====================================================
+       */
+
+      const isAdmin =
+        profileData.access_role === "admin";
+
+      const isChefCentre =
+        businessRoleCodes.includes(
+          "chef_centre"
+        );
+
+      const isAdjointChefCentre =
+        businessRoleCodes.includes(
+          "adjoint_chef_centre"
+        );
+
+      const hasManagementRole =
+        businessRoleCodes.some((code) =>
+          USER_MANAGEMENT_ROLES.includes(
+            code
+          )
+        );
+
+      setCanManageUsers(
+        isAdmin || hasManagementRole
+      );
+
+      if (isAdmin) {
+        setManagementLabel(
+          "Administrateur"
+        );
+      } else if (isChefCentre) {
+        setManagementLabel(
+          "Chef de centre"
+        );
+      } else if (
+        isAdjointChefCentre
+      ) {
+        setManagementLabel(
+          "Adjoint chef de centre"
+        );
+      } else {
+        setManagementLabel(null);
+      }
+
+      setProfile(profileData as Profile);
       setIsCheckingSession(false);
     };
 
     void checkSession();
 
+    /*
+     * =====================================================
+     * Surveillance de la session
+     * =====================================================
+     */
+
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        router.replace("/");
-      }
-    });
+    } =
+      supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          if (!session) {
+            router.replace("/");
+          }
+        }
+      );
 
     return () => {
       subscription.unsubscribe();
     };
   }, [router]);
+
+  /*
+   * =====================================================
+   * DÉCONNEXION
+   * =====================================================
+   */
 
   const handleLogout = () => {
     if (isLoggingOut) {
@@ -143,14 +321,28 @@ export default function DashboardPage() {
     }
 
     setIsLoggingOut(true);
+
     router.replace("/");
 
-    void supabase.auth.signOut({ scope: "local" }).then(({ error }) => {
-      if (error) {
-        console.error("Erreur lors de la déconnexion :", error);
-      }
-    });
+    void supabase.auth
+      .signOut({
+        scope: "local",
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error(
+            "Erreur lors de la déconnexion :",
+            error
+          );
+        }
+      });
   };
+
+  /*
+   * =====================================================
+   * CHARGEMENT
+   * =====================================================
+   */
 
   if (isCheckingSession) {
     return (
@@ -159,12 +351,19 @@ export default function DashboardPage() {
           <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-red-600" />
 
           <p className="mt-4 font-semibold text-slate-700 dark:text-slate-200">
-            Chargement de l&apos;application...
+            Chargement de
+            l&apos;application...
           </p>
         </div>
       </main>
     );
   }
+
+  /*
+   * =====================================================
+   * PAGE
+   * =====================================================
+   */
 
   return (
     <main className="min-h-screen bg-slate-100 pb-28 text-slate-950 dark:bg-slate-950 dark:text-white lg:pb-10">
@@ -175,7 +374,9 @@ export default function DashboardPage() {
       />
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <WelcomeSection profile={profile} />
+        <WelcomeSection
+          profile={profile}
+        />
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.8fr)]">
           <div className="space-y-6">
@@ -188,23 +389,32 @@ export default function DashboardPage() {
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="font-bold text-red-600">Rappel important</p>
+                <p className="font-bold text-red-600">
+                  Rappel important
+                </p>
 
                 <h2 className="mt-1 text-lg font-extrabold">
                   Vérification des ARI
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  Pense à vérifier ton ARI avant la garde.
+                  Pense à vérifier ton
+                  ARI avant la garde.
                 </p>
               </div>
 
-              <span className="text-3xl text-red-600">›</span>
+              <span className="text-3xl text-red-600">
+                ›
+              </span>
             </Link>
 
-            <QuickAccess items={quickAccessItems} />
+            <QuickAccess
+              items={quickAccessItems}
+            />
 
-            <UpcomingEvents events={upcomingEvents} />
+            <UpcomingEvents
+              events={upcomingEvents}
+            />
           </div>
 
           <aside className="space-y-6">
@@ -214,17 +424,25 @@ export default function DashboardPage() {
               href="/dashboard/notifications"
               className="flex items-center gap-4 rounded-3xl border border-amber-200 bg-amber-50 p-5 transition hover:shadow-md active:scale-[0.99] dark:border-amber-900 dark:bg-amber-950/30"
             >
-              <div className="text-3xl">⚠️</div>
+              <div className="text-3xl">
+                ⚠️
+              </div>
 
               <div className="min-w-0 flex-1">
-                <p className="font-extrabold">Pense-bête</p>
+                <p className="font-extrabold">
+                  Pense-bête
+                </p>
 
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  N&apos;oublie pas ta tenue de sport pour l&apos;entraînement.
+                  N&apos;oublie pas ta
+                  tenue de sport pour
+                  l&apos;entraînement.
                 </p>
               </div>
 
-              <span className="text-3xl">›</span>
+              <span className="text-3xl">
+                ›
+              </span>
             </Link>
 
             <section className="rounded-3xl bg-white p-5 shadow-sm dark:bg-slate-900 sm:p-6">
@@ -240,12 +458,9 @@ export default function DashboardPage() {
                 </p>
 
                 <p className="text-sm font-medium capitalize text-red-600">
-  {profile?.role || "Utilisateur"}
-</p>
-
-<p className="text-xs text-slate-400">
-  access_role : {profile?.access_role}
-</p>
+                  {profile?.role ||
+                    "Utilisateur"}
+                </p>
 
                 {profile?.grade && (
                   <p className="text-sm text-slate-600 dark:text-slate-300">
@@ -253,25 +468,33 @@ export default function DashboardPage() {
                   </p>
                 )}
 
-{profile?.access_role === "admin" && (
-  <p className="text-green-500 font-bold">
-    ✅ Je suis administrateur
-  </p>
-)}
+                {managementLabel && (
+                  <div className="pt-2">
+                    <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                      <span>✓</span>
+
+                      {managementLabel}
+                    </span>
+                  </div>
+                )}
+
                 {profile?.fonction && (
-                  <p className="text-sm text-slate-500">
+                  <p className="pt-1 text-sm text-slate-500">
                     {profile.fonction}
                   </p>
                 )}
               </div>
 
-              {profile?.access_role === "admin" && (
+              {canManageUsers && (
                 <Link
                   href="/dashboard/admin"
                   className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 font-bold text-white transition hover:bg-slate-800 active:scale-[0.98] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
                 >
                   <span>⚙️</span>
-                  <span>Administration</span>
+
+                  <span>
+                    Gestion des utilisateurs
+                  </span>
                 </Link>
               )}
 
@@ -281,7 +504,9 @@ export default function DashboardPage() {
                 disabled={isLoggingOut}
                 className="mt-3 w-full rounded-2xl border border-red-200 px-5 py-3 font-bold text-red-600 transition hover:bg-red-50 active:scale-[0.98] disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950/30 sm:hidden"
               >
-                {isLoggingOut ? "Déconnexion..." : "Se déconnecter"}
+                {isLoggingOut
+                  ? "Déconnexion..."
+                  : "Se déconnecter"}
               </button>
             </section>
           </aside>
@@ -294,45 +519,69 @@ export default function DashboardPage() {
             href="/dashboard"
             className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-red-600"
           >
-            <span className="text-2xl">🏠</span>
-            <span className="text-xs font-bold">Accueil</span>
+            <span className="text-2xl">
+              🏠
+            </span>
+
+            <span className="text-xs font-bold">
+              Accueil
+            </span>
           </Link>
 
           <Link
             href="/dashboard/materiel"
             className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-slate-500"
           >
-            <span className="text-2xl">🧰</span>
-            <span className="text-xs font-semibold">Matériel</span>
+            <span className="text-2xl">
+              🧰
+            </span>
+
+            <span className="text-xs font-semibold">
+              Matériel
+            </span>
           </Link>
 
           <Link
             href="/dashboard/planning"
             className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-slate-500"
           >
-            <span className="text-2xl">📅</span>
-            <span className="text-xs font-semibold">Planning</span>
+            <span className="text-2xl">
+              📅
+            </span>
+
+            <span className="text-xs font-semibold">
+              Planning
+            </span>
           </Link>
 
           <Link
             href="/dashboard/messages"
             className="relative flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-slate-500"
           >
-            <span className="text-2xl">💬</span>
+            <span className="text-2xl">
+              💬
+            </span>
 
             <span className="absolute right-[25%] top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
               1
             </span>
 
-            <span className="text-xs font-semibold">Messages</span>
+            <span className="text-xs font-semibold">
+              Messages
+            </span>
           </Link>
 
           <Link
             href="/dashboard/plus"
             className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-slate-500"
           >
-            <span className="text-2xl">☰</span>
-            <span className="text-xs font-semibold">Plus</span>
+            <span className="text-2xl">
+              ☰
+            </span>
+
+            <span className="text-xs font-semibold">
+              Plus
+            </span>
           </Link>
         </div>
       </nav>
