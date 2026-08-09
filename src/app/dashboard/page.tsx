@@ -22,6 +22,7 @@ import {
   Truck,
   Users,
   Pill,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -194,6 +195,63 @@ function SidebarItem({
   );
 }
 
+function MobileMoreLink({
+  href,
+  icon,
+  label,
+  badge,
+  emphasized = false,
+  onNavigate,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  badge?: string;
+  emphasized?: boolean;
+  onNavigate: () => void;
+}) {
+  const Icon = icon;
+
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      className={`flex min-h-14 items-center gap-3 rounded-2xl border px-4 py-3 transition active:scale-[0.99] ${
+        emphasized
+          ? "border-red-400 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+          : "border-border bg-background text-foreground hover:bg-surface-soft"
+      }`}
+    >
+      <span
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+          emphasized
+            ? "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300"
+            : "bg-surface-strong text-muted-foreground"
+        }`}
+      >
+        <Icon
+          size={19}
+          strokeWidth={1.9}
+        />
+      </span>
+
+      <span className="min-w-0 flex-1 truncate text-sm font-black">
+        {label}
+      </span>
+
+      {badge && (
+        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-black text-white">
+          {badge}
+        </span>
+      )}
+
+      <span className="text-lg text-muted-foreground">
+        ›
+      </span>
+    </Link>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
 
@@ -218,6 +276,7 @@ export default function DashboardPage() {
 
   const [businessRoleCodes, setBusinessRoleCodes] = useState<string[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -754,6 +813,219 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {isMobileMoreOpen && (
+        <div
+          className="fixed inset-0 z-[70] lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu Plus"
+        >
+          <button
+            type="button"
+            onClick={() =>
+              setIsMobileMoreOpen(false)
+            }
+            className="absolute inset-0 bg-black/60"
+            aria-label="Fermer le menu"
+          />
+
+          <section className="absolute inset-x-0 bottom-0 max-h-[82vh] overflow-y-auto rounded-t-3xl border-t border-border bg-card shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 px-5 py-4 backdrop-blur-xl">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-red-500">
+                  Navigation
+                </p>
+
+                <h2 className="mt-1 text-xl font-black">
+                  Plus
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setIsMobileMoreOpen(false)
+                }
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface-soft text-foreground"
+                aria-label="Fermer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-6 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+              <section>
+                <p className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                  Mon espace
+                </p>
+
+                <div className="grid gap-2">
+                  <MobileMoreLink
+                    href="/dashboard/sac"
+                    icon={Backpack}
+                    label="Mon sac"
+                    onNavigate={() =>
+                      setIsMobileMoreOpen(false)
+                    }
+                  />
+
+                  <MobileMoreLink
+                    href="/dashboard/verifications"
+                    icon={ClipboardCheck}
+                    label="Vérifications"
+                    onNavigate={() =>
+                      setIsMobileMoreOpen(false)
+                    }
+                  />
+
+                  <MobileMoreLink
+                    href="/dashboard/disponibilites"
+                    icon={CalendarDays}
+                    label="Disponibilités"
+                    onNavigate={() =>
+                      setIsMobileMoreOpen(false)
+                    }
+                  />
+                </div>
+              </section>
+
+              <section>
+                <p className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                  Vie de la caserne
+                </p>
+
+                <div className="grid gap-2">
+                  <MobileMoreLink
+                    href="/dashboard/actualites"
+                    icon={Newspaper}
+                    label="Actualités"
+                    badge="1"
+                    onNavigate={() =>
+                      setIsMobileMoreOpen(false)
+                    }
+                  />
+
+                  <MobileMoreLink
+                    href="/dashboard/evenements-indesirables"
+                    icon={TriangleAlert}
+                    label="Événements indésirables"
+                    onNavigate={() =>
+                      setIsMobileMoreOpen(false)
+                    }
+                  />
+
+                  <MobileMoreLink
+                    href="/dashboard/documents"
+                    icon={FolderOpen}
+                    label="Documents"
+                    onNavigate={() =>
+                      setIsMobileMoreOpen(false)
+                    }
+                  />
+
+                  <MobileMoreLink
+                    href="/dashboard/annuaire"
+                    icon={Users}
+                    label="Annuaire"
+                    onNavigate={() =>
+                      setIsMobileMoreOpen(false)
+                    }
+                  />
+                </div>
+              </section>
+
+              {canSeeSecourisme && (
+                <section>
+                  <p className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.16em] text-red-500">
+                    Secourisme
+                  </p>
+
+                  <div className="grid gap-2">
+                    <MobileMoreLink
+                      href="/dashboard/secourisme"
+                      icon={Ambulance}
+                      label="Accueil Secourisme"
+                      emphasized
+                      onNavigate={() =>
+                        setIsMobileMoreOpen(false)
+                      }
+                    />
+
+                    {canSeePharmacyMenu && (
+                      <>
+                        <MobileMoreLink
+                          href="/dashboard/secourisme/alertes"
+                          icon={BellRing}
+                          label="Alertes pharmacie"
+                          onNavigate={() =>
+                            setIsMobileMoreOpen(false)
+                          }
+                        />
+
+                        <MobileMoreLink
+                          href="/dashboard/secourisme/stock"
+                          icon={Pill}
+                          label="Stock pharmacie"
+                          onNavigate={() =>
+                            setIsMobileMoreOpen(false)
+                          }
+                        />
+
+                        <MobileMoreLink
+                          href="/dashboard/secourisme/peremptions"
+                          icon={CalendarClock}
+                          label="Péremptions"
+                          onNavigate={() =>
+                            setIsMobileMoreOpen(false)
+                          }
+                        />
+
+                        <MobileMoreLink
+                          href="/dashboard/secourisme/fournisseurs"
+                          icon={Truck}
+                          label="Fournisseurs"
+                          onNavigate={() =>
+                            setIsMobileMoreOpen(false)
+                          }
+                        />
+
+                        <MobileMoreLink
+                          href="/dashboard/secourisme/categories"
+                          icon={Tags}
+                          label="Catégories"
+                          onNavigate={() =>
+                            setIsMobileMoreOpen(false)
+                          }
+                        />
+                      </>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {canManageUsers && (
+                <section>
+                  <p className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                    Administration
+                  </p>
+
+                  <div className="grid gap-2">
+                    <MobileMoreLink
+                      href="/dashboard/admin"
+                      icon={Settings}
+                      label="Gestion des utilisateurs"
+                      onNavigate={() =>
+                        setIsMobileMoreOpen(false)
+                      }
+                    />
+                  </div>
+                </section>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-sidebar-border bg-sidebar/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl  lg:hidden">
         <div className="mx-auto grid max-w-2xl grid-cols-5">
           <Link
@@ -812,8 +1084,11 @@ export default function DashboardPage() {
             </span>
           </Link>
 
-          <Link
-            href="/dashboard/plus"
+          <button
+            type="button"
+            onClick={() =>
+              setIsMobileMoreOpen(true)
+            }
             className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-muted-foreground"
           >
             <span className="text-2xl">
@@ -823,7 +1098,7 @@ export default function DashboardPage() {
             <span className="text-xs font-semibold">
               Plus
             </span>
-          </Link>
+          </button>
         </div>
       </nav>
     </main>
