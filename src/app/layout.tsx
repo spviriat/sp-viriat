@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import {
+  Geist,
+  Geist_Mono,
+} from "next/font/google";
+
 import ThemeProvider from "@/components/ThemeProvider";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,7 +20,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "SP Viriat",
-  description: "Application des sapeurs-pompiers de Viriat",
+  description:
+    "Application des sapeurs-pompiers de Viriat",
 };
 
 export default function RootLayout({
@@ -29,8 +35,10 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">
-        <ThemeProvider>{children}</ThemeProvider>
+      <body className="min-h-full">
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

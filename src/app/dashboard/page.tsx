@@ -3,6 +3,27 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Ambulance,
+  Backpack,
+  BellRing,
+  CalendarDays,
+  CalendarClock,
+  ClipboardCheck,
+  FileText,
+  FolderOpen,
+  House,
+  Menu,
+  Newspaper,
+  Package,
+  Settings,
+  Tags,
+  TriangleAlert,
+  Truck,
+  Users,
+  Pill,
+  type LucideIcon,
+} from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import type { Profile } from "@/types/profile";
@@ -104,6 +125,75 @@ function getBusinessRoleCode(
   return assignment.business_roles.code;
 }
 
+function SidebarSection({
+  title,
+  open,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      {open && (
+        <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+          {title}
+        </p>
+      )}
+      <div className="space-y-1">{children}</div>
+    </section>
+  );
+}
+
+function SidebarItem({
+  href,
+  icon,
+  label,
+  open,
+  badge,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  open: boolean;
+  badge?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      title={!open ? label : undefined}
+      className={`relative flex min-h-11 items-center rounded-xl text-sm font-bold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-muted-foreground dark:hover:bg-slate-900 dark:hover:text-white ${
+        open ? "gap-3 px-3" : "justify-center px-2"
+      }`}
+    >
+      {(() => {
+        const Icon = icon;
+
+        return (
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-slate-600 shadow-sm  dark:text-muted-foreground">
+            <Icon
+              size={18}
+              strokeWidth={1.9}
+            />
+          </span>
+        );
+      })()}
+
+      {open && <span className="min-w-0 flex-1 truncate">{label}</span>}
+      {badge && (
+        <span
+          className={`flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white ${
+            open ? "" : "absolute right-1 top-1"
+          }`}
+        >
+          {badge}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
 
@@ -125,6 +215,9 @@ export default function DashboardPage() {
   const [managementLabel, setManagementLabel] = useState<
     "Administrateur" | "Chef de centre" | "Adjoint chef de centre" | null
   >(null);
+
+  const [businessRoleCodes, setBusinessRoleCodes] = useState<string[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -232,6 +325,8 @@ export default function DashboardPage() {
           (code): code is string =>
             Boolean(code)
         );
+
+      setBusinessRoleCodes(businessRoleCodes);
 
       /*
        * =====================================================
@@ -346,11 +441,11 @@ export default function DashboardPage() {
 
   if (isCheckingSession) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-950">
-        <div className="rounded-3xl bg-white px-8 py-7 text-center shadow-xl dark:bg-slate-900">
+      <main className="flex min-h-screen items-center justify-center bg-background">
+        <div className="rounded-3xl border border-border bg-card px-8 py-7 text-center shadow-xl">
           <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-red-600" />
 
-          <p className="mt-4 font-semibold text-slate-700 dark:text-slate-200">
+          <p className="mt-4 font-semibold text-foreground">
             Chargement de
             l&apos;application...
           </p>
@@ -359,6 +454,37 @@ export default function DashboardPage() {
     );
   }
 
+  const isAdmin =
+    profile?.access_role === "admin";
+
+  const isChefCentre =
+    businessRoleCodes.includes("chef_centre");
+
+  const isAdjointChefCentre =
+    businessRoleCodes.includes(
+      "adjoint_chef_centre"
+    );
+
+  const isFirefighter =
+    businessRoleCodes.includes(
+      "sapeur_pompier"
+    );
+
+  const isPharmacyManager =
+    businessRoleCodes.includes(
+      "responsable_pharmacie"
+    );
+
+  const canSeeSecourisme =
+    isAdmin ||
+    isChefCentre ||
+    isAdjointChefCentre ||
+    isFirefighter ||
+    isPharmacyManager;
+
+  const canSeePharmacyMenu =
+    isAdmin || isPharmacyManager;
+
   /*
    * =====================================================
    * PAGE
@@ -366,14 +492,129 @@ export default function DashboardPage() {
    */
 
   return (
-    <main className="min-h-screen bg-slate-100 pb-28 text-slate-950 dark:bg-slate-950 dark:text-white lg:pb-10">
+    <main className="app-page pb-28 lg:pb-10">
       <DashboardHeader
         profile={profile}
         isLoggingOut={isLoggingOut}
         onLogout={handleLogout}
       />
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <aside
+        className={`app-sidebar fixed bottom-0 left-0 top-[78px] z-40 hidden border-r bg-sidebar/95 backdrop-blur-xl transition-all duration-300 lg:block ${
+          isSidebarOpen ? "w-64" : "w-20"
+        }`}
+      >
+        <div className="flex h-full flex-col overflow-y-auto p-3">
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen((value) => !value)}
+            className="mb-4 flex h-11 items-center justify-center gap-2 rounded-2xl border border-border bg-surface-soft font-bold text-slate-700 transition hover:bg-slate-100  dark:text-slate-200 dark:hover:bg-slate-800"
+            title={isSidebarOpen ? "Réduire le menu" : "Ouvrir le menu"}
+          >
+            <Menu
+              size={19}
+              strokeWidth={2}
+            />
+            {isSidebarOpen && <span>Menu</span>}
+          </button>
+
+          <nav className="space-y-5">
+            <SidebarSection title="Mon espace" open={isSidebarOpen}>
+              <SidebarItem href="/dashboard" icon={House} label="Accueil" open={isSidebarOpen} />
+              <SidebarItem href="/dashboard/materiel" icon={Package} label="Mon matériel" open={isSidebarOpen} />
+              <SidebarItem href="/dashboard/sac" icon={Backpack} label="Mon sac" open={isSidebarOpen} />
+              <SidebarItem href="/dashboard/verifications" icon={ClipboardCheck} label="Vérifications" open={isSidebarOpen} />
+              <SidebarItem href="/dashboard/disponibilites" icon={CalendarDays} label="Disponibilités" open={isSidebarOpen} />
+            </SidebarSection>
+
+            <SidebarSection title="Vie de la caserne" open={isSidebarOpen}>
+              <SidebarItem href="/dashboard/actualites" icon={Newspaper} label="Actualités" open={isSidebarOpen} badge="1" />
+              <SidebarItem href="/dashboard/evenements-indesirables" icon={TriangleAlert} label="Événements indésirables" open={isSidebarOpen} />
+              <SidebarItem href="/dashboard/documents" icon={FolderOpen} label="Documents" open={isSidebarOpen} />
+              <SidebarItem href="/dashboard/annuaire" icon={Users} label="Annuaire" open={isSidebarOpen} />
+              <SidebarItem href="/dashboard/planning" icon={CalendarDays} label="Planning" open={isSidebarOpen} />
+            </SidebarSection>
+
+            {canSeeSecourisme && (
+              <SidebarSection
+                title="Secourisme"
+                open={isSidebarOpen}
+              >
+                <SidebarItem
+                  href="/dashboard/secourisme"
+                  icon={Ambulance}
+                  label="Secourisme"
+                  open={isSidebarOpen}
+                />
+
+                {canSeePharmacyMenu && (
+                  <>
+                    <SidebarItem
+                      href="/dashboard/secourisme/alertes"
+                      icon={BellRing}
+                      label="Alertes"
+                      open={isSidebarOpen}
+                    />
+
+                    <SidebarItem
+                      href="/dashboard/secourisme/stock"
+                      icon={Pill}
+                      label="Stock pharmacie"
+                      open={isSidebarOpen}
+                    />
+
+                    <SidebarItem
+                      href="/dashboard/secourisme/peremptions"
+                      icon={CalendarClock}
+                      label="Péremptions"
+                      open={isSidebarOpen}
+                    />
+
+                    <SidebarItem
+                      href="/dashboard/secourisme/fournisseurs"
+                      icon={Truck}
+                      label="Fournisseurs"
+                      open={isSidebarOpen}
+                    />
+
+                    <SidebarItem
+                      href="/dashboard/secourisme/categories"
+                      icon={Tags}
+                      label="Catégories"
+                      open={isSidebarOpen}
+                    />
+                  </>
+                )}
+              </SidebarSection>
+            )}
+
+            {canManageUsers && (
+              <SidebarSection title="Administration" open={isSidebarOpen}>
+                <SidebarItem href="/dashboard/admin" icon={Settings} label="Utilisateurs" open={isSidebarOpen} />
+              </SidebarSection>
+            )}
+          </nav>
+
+          {isSidebarOpen && (
+            <div className="mt-auto pt-5">
+              <div className="rounded-2xl border border-border bg-surface-soft p-3 ">
+                <p className="truncate text-sm font-extrabold">
+                  {profile ? `${profile.first_name} ${profile.last_name}`.trim() : "Utilisateur"}
+                </p>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {managementLabel || profile?.grade || profile?.role || "Membre"}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      <div
+        className={`mx-auto max-w-7xl px-4 py-6 transition-[padding] duration-300 sm:px-6 lg:py-8 ${
+          isSidebarOpen ? "lg:pl-72 lg:pr-8" : "lg:pl-28 lg:pr-8"
+        }`}
+      >
         <WelcomeSection
           profile={profile}
         />
@@ -397,7 +638,7 @@ export default function DashboardPage() {
                   Vérification des ARI
                 </h2>
 
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                <p className="mt-1 text-sm text-muted-foreground">
                   Pense à vérifier ton
                   ARI avant la garde.
                 </p>
@@ -433,7 +674,7 @@ export default function DashboardPage() {
                   Pense-bête
                 </p>
 
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                <p className="mt-1 text-sm text-muted-foreground">
                   N&apos;oublie pas ta
                   tenue de sport pour
                   l&apos;entraînement.
@@ -445,13 +686,13 @@ export default function DashboardPage() {
               </span>
             </Link>
 
-            <section className="rounded-3xl bg-white p-5 shadow-sm dark:bg-slate-900 sm:p-6">
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+            <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                 Mon compte
               </p>
 
               <div className="mt-3 space-y-1">
-                <p className="font-extrabold text-slate-900 dark:text-white">
+                <p className="font-extrabold text-foreground">
                   {profile
                     ? `${profile.first_name} ${profile.last_name}`.trim()
                     : "Profil indisponible"}
@@ -463,7 +704,7 @@ export default function DashboardPage() {
                 </p>
 
                 {profile?.grade && (
-                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                  <p className="text-sm text-muted-foreground">
                     {profile.grade}
                   </p>
                 )}
@@ -479,7 +720,7 @@ export default function DashboardPage() {
                 )}
 
                 {profile?.fonction && (
-                  <p className="pt-1 text-sm text-slate-500">
+                  <p className="pt-1 text-sm text-muted-foreground">
                     {profile.fonction}
                   </p>
                 )}
@@ -513,7 +754,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95 lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-sidebar-border bg-sidebar/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl  lg:hidden">
         <div className="mx-auto grid max-w-2xl grid-cols-5">
           <Link
             href="/dashboard"
@@ -530,7 +771,7 @@ export default function DashboardPage() {
 
           <Link
             href="/dashboard/materiel"
-            className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-slate-500"
+            className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-muted-foreground"
           >
             <span className="text-2xl">
               🧰
@@ -543,7 +784,7 @@ export default function DashboardPage() {
 
           <Link
             href="/dashboard/planning"
-            className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-slate-500"
+            className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-muted-foreground"
           >
             <span className="text-2xl">
               📅
@@ -556,7 +797,7 @@ export default function DashboardPage() {
 
           <Link
             href="/dashboard/messages"
-            className="relative flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-slate-500"
+            className="relative flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-muted-foreground"
           >
             <span className="text-2xl">
               💬
@@ -573,7 +814,7 @@ export default function DashboardPage() {
 
           <Link
             href="/dashboard/plus"
-            className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-slate-500"
+            className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-muted-foreground"
           >
             <span className="text-2xl">
               ☰
