@@ -24,6 +24,7 @@ import {
   Tags,
   Truck,
   Users,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -166,6 +167,11 @@ export default function SecourismePage() {
     isSidebarOpen,
     setIsSidebarOpen,
   ] = useState(true);
+
+  const [
+    isMobileMenuOpen,
+    setIsMobileMenuOpen,
+  ] = useState(false);
 
   const [errorMessage, setErrorMessage] =
     useState("");
@@ -455,6 +461,26 @@ export default function SecourismePage() {
         }`}
       >
         <main className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
+          <div className="mb-4 flex items-center justify-between lg:hidden">
+            <button
+              type="button"
+              onClick={() =>
+                setIsMobileMenuOpen(true)
+              }
+              className="app-button-secondary inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-black"
+            >
+              <Menu size={18} />
+              Menu Secourisme
+            </button>
+
+            <Link
+              href="/dashboard"
+              className="text-sm font-bold text-muted-foreground transition hover:text-foreground"
+            >
+              Tableau de bord
+            </Link>
+          </div>
+
           <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-sm font-black uppercase tracking-[0.2em] text-red-500">
@@ -743,6 +769,185 @@ export default function SecourismePage() {
           )}
         </main>
       </div>
+
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-[70] lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu Secourisme"
+        >
+          <button
+            type="button"
+            onClick={() =>
+              setIsMobileMenuOpen(false)
+            }
+            className="absolute inset-0 bg-black/60"
+            aria-label="Fermer le menu"
+          />
+
+          <aside className="absolute bottom-0 left-0 top-0 w-[88%] max-w-sm border-r border-sidebar-border bg-sidebar shadow-2xl">
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between border-b border-sidebar-border p-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500">
+                    Secourisme
+                  </p>
+
+                  <p className="mt-1 text-base font-black">
+                    SP Viriat
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setIsMobileMenuOpen(false)
+                  }
+                  className="app-button-secondary flex h-10 w-10 items-center justify-center rounded-xl"
+                  aria-label="Fermer le menu"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <nav className="flex-1 space-y-5 overflow-y-auto p-3">
+                <MobileSidebarSection title="Navigation">
+                  <MobileSidebarLink
+                    href="/dashboard"
+                    icon={LayoutDashboard}
+                    label="Tableau de bord"
+                    onNavigate={() =>
+                      setIsMobileMenuOpen(false)
+                    }
+                  />
+
+                  <MobileSidebarLink
+                    href="/dashboard/secourisme"
+                    icon={Ambulance}
+                    label="Accueil Secourisme"
+                    active
+                    onNavigate={() =>
+                      setIsMobileMenuOpen(false)
+                    }
+                  />
+                </MobileSidebarSection>
+
+                <MobileSidebarSection title="Sacs de secours">
+                  {canViewBagAnalytics ? (
+                    <MobileSidebarLink
+                      href="/dashboard/secourisme/sacs/historique"
+                      icon={BarChart3}
+                      label="Historique & statistiques"
+                      onNavigate={() =>
+                        setIsMobileMenuOpen(false)
+                      }
+                    />
+                  ) : (
+                    <MobileSidebarStaticItem
+                      icon={ClipboardCheck}
+                      label="Suivi des contrôles"
+                    />
+                  )}
+
+                  {!isSupervisor && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setIsRestockChooserOpen(true);
+                      }}
+                      className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-muted-foreground">
+                        <RotateCcw
+                          size={18}
+                          strokeWidth={1.9}
+                        />
+                      </span>
+
+                      <span className="truncate">
+                        Réarmer un sac
+                      </span>
+                    </button>
+                  )}
+                </MobileSidebarSection>
+
+                {canManagePharmacy && (
+                  <MobileSidebarSection title="Pharmacie">
+                    <MobileSidebarLink
+                      href="/dashboard/secourisme/alertes"
+                      icon={BellRing}
+                      label="Alertes"
+                      onNavigate={() =>
+                        setIsMobileMenuOpen(false)
+                      }
+                    />
+
+                    <MobileSidebarLink
+                      href="/dashboard/secourisme/stock"
+                      icon={Pill}
+                      label="Stock pharmacie"
+                      onNavigate={() =>
+                        setIsMobileMenuOpen(false)
+                      }
+                    />
+
+                    <MobileSidebarLink
+                      href="/dashboard/secourisme/peremptions"
+                      icon={CalendarClock}
+                      label="Péremptions"
+                      onNavigate={() =>
+                        setIsMobileMenuOpen(false)
+                      }
+                    />
+
+                    <MobileSidebarLink
+                      href="/dashboard/secourisme/fournisseurs"
+                      icon={Truck}
+                      label="Fournisseurs"
+                      onNavigate={() =>
+                        setIsMobileMenuOpen(false)
+                      }
+                    />
+
+                    <MobileSidebarLink
+                      href="/dashboard/secourisme/categories"
+                      icon={Tags}
+                      label="Catégories"
+                      onNavigate={() =>
+                        setIsMobileMenuOpen(false)
+                      }
+                    />
+
+                    <MobileSidebarLink
+                      href="/dashboard/secourisme/mouvements"
+                      icon={Package}
+                      label="Mouvements"
+                      onNavigate={() =>
+                        setIsMobileMenuOpen(false)
+                      }
+                    />
+                  </MobileSidebarSection>
+                )}
+              </nav>
+
+              <div className="border-t border-sidebar-border p-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setIsMobileMenuOpen(false)
+                  }
+                  className="app-button-secondary flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-black"
+                >
+                  <X size={17} />
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
 
       {isRestockChooserOpen && (
         <div
@@ -1069,6 +1274,96 @@ function StatusCard({
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         {description}
       </p>
+    </div>
+  );
+}
+
+function MobileSidebarSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+        {title}
+      </p>
+
+      <div className="space-y-1">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function MobileSidebarLink({
+  href,
+  icon,
+  label,
+  active = false,
+  onNavigate,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  active?: boolean;
+  onNavigate: () => void;
+}) {
+  const Icon = icon;
+
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-bold transition ${
+        active
+          ? "border border-red-300 bg-red-100 text-red-800 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-300"
+          : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+      }`}
+    >
+      <span
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+          active
+            ? "bg-red-200 text-red-800 dark:bg-red-950/70 dark:text-red-300"
+            : "bg-sidebar-accent text-muted-foreground"
+        }`}
+      >
+        <Icon
+          size={18}
+          strokeWidth={1.9}
+        />
+      </span>
+
+      <span className="truncate">
+        {label}
+      </span>
+    </Link>
+  );
+}
+
+function MobileSidebarStaticItem({
+  icon,
+  label,
+}: {
+  icon: LucideIcon;
+  label: string;
+}) {
+  const Icon = icon;
+
+  return (
+    <div className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-bold text-muted-foreground">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-muted-foreground">
+        <Icon
+          size={18}
+          strokeWidth={1.9}
+        />
+      </span>
+
+      <span className="truncate">
+        {label}
+      </span>
     </div>
   );
 }
