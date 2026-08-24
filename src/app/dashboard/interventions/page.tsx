@@ -117,6 +117,7 @@ export default function InterventionsPage() {
   const [drafts, setDrafts] = useState<DraftIntervention[]>([]);
 
   const [isCommand, setIsCommand] = useState(false);
+  const [isObserver, setIsObserver] = useState(false);
   const [canResetNumbering, setCanResetNumbering] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -195,7 +196,10 @@ export default function InterventionsPage() {
       const resetAllowed =
         admin || roleCodes.includes("chef_centre");
 
+      const observer = roleCodes.includes("observateur");
+
       setIsCommand(command);
+      setIsObserver(observer);
       setCanResetNumbering(resetAllowed);
 
       /* ---------------------------------------------------
@@ -221,35 +225,35 @@ export default function InterventionsPage() {
          MES BROUILLONS
       --------------------------------------------------- */
 
-      const draftsResult = await supabase
-  .from("interventions")
-  .select(
-    `
-    id,
-    date_intervention,
-    heure_depart,
-    sous_type,
-    numero_interne,
-    numero_codis,
-    statut
-  `
-  )
-  .eq("created_by", session.user.id)
-  .eq("statut", "brouillon")
-  .order("date_intervention", {
-    ascending: false,
-  });
+      if (observer) {
+        setDrafts([]);
+      } else {
+        const draftsResult = await supabase
+          .from("interventions")
+          .select(`
+            id,
+            date_intervention,
+            heure_depart,
+            sous_type,
+            numero_interne,
+            numero_codis,
+            statut
+          `)
+          .eq("created_by", session.user.id)
+          .eq("statut", "brouillon")
+          .order("date_intervention", { ascending: false });
 
-      if (draftsResult.error) {
-        throw new Error(
-          draftsResult.error.message ||
-            "Impossible de charger vos brouillons."
+        if (draftsResult.error) {
+          throw new Error(
+            draftsResult.error.message ||
+              "Impossible de charger vos brouillons."
+          );
+        }
+
+        setDrafts(
+          (draftsResult.data ?? []) as DraftIntervention[]
         );
       }
-
-      setDrafts(
-        (draftsResult.data ?? []) as DraftIntervention[]
-      );
     } catch (error) {
       console.error(
         "Erreur chargement interventions :",
@@ -390,31 +394,35 @@ export default function InterventionsPage() {
               Interventions
             </h1>
 
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Créez les fiches d&apos;intervention et
-              consultez l&apos;historique opérationnel du
-              centre.
-            </p>
+           <p className="mt-2 text-sm text-muted-foreground">
+  {isObserver
+    ? "Consultez l’historique opérationnel du centre."
+    : "Créez les fiches d’intervention et consultez l’historique opérationnel du centre."}
+</p>
           </div>
 
-          <Link
-            href="/dashboard/interventions/nouvelle"
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 text-sm font-black text-white transition hover:bg-red-700"
-          >
-            <Plus size={19} />
-            Nouvelle intervention
-          </Link>
+          {!isObserver && (
+            <Link
+              href="/dashboard/interventions/nouvelle"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 text-sm font-black text-white transition hover:bg-red-700"
+            >
+              <Plus size={19} />
+              Nouvelle intervention
+            </Link>
+          )}
         </header>
 
         {/* CARTES RÉSUMÉ */}
 
         <section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <SummaryCard
-            icon={FilePenLine}
-            label="Mes brouillons"
-            value={drafts.length}
-            description="Fiches à terminer"
-          />
+          {!isObserver && (
+            <SummaryCard
+              icon={FilePenLine}
+              label="Mes brouillons"
+              value={drafts.length}
+              description="Fiches à terminer"
+            />
+          )}
 
           <SummaryCard
             icon={History}
@@ -426,16 +434,28 @@ export default function InterventionsPage() {
           <SummaryCard
             icon={ShieldCheck}
             label="Accès"
-            value={isCommand ? "Commandement" : "Pompier"}
+            value={
+              isObserver
+                ? "Observateur"
+                : isCommand
+                  ? "Commandement"
+                  : "Pompier"
+            }
             description={
-              isCommand
-                ? "Accès aux fiches complètes"
-                : "Historique limité"
+              isObserver
+                ? "Consultation uniquement"
+                : isCommand
+                  ? "Accès aux fiches complètes"
+                  : "Historique limité"
             }
           />
         </section>
 
         {/* BROUILLONS */}
+
+        {!isObserver && (
+          <>
+
 
         <section className="mt-7 overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
           <div className="flex items-center justify-between gap-4 border-b border-border p-5 sm:p-6">
@@ -517,6 +537,9 @@ export default function InterventionsPage() {
             </div>
           )}
         </section>
+
+          </>
+        )}
 
         {/* HISTORIQUE */}
 

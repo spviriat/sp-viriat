@@ -9,11 +9,11 @@ import NextDuty from "@/components/dashboard/NextDuty";
 import { useDashboardShell } from "@/components/dashboard/DashboardShell";
 
 const quickAccessItems = [
- {
-  title: "Interventions",
-  icon: "🚒",
-  href: "/dashboard/interventions",
-},
+  {
+    title: "Interventions",
+    icon: "🚒",
+    href: "/dashboard/interventions",
+  },
   {
     title: "Mon sac",
     icon: "🎒",

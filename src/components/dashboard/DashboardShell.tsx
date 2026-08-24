@@ -17,6 +17,7 @@ import {
   CalendarDays,
   CalendarClock,
   ClipboardCheck,
+  FilePlus2,
   FolderOpen,
   House,
   Menu,
@@ -422,6 +423,17 @@ export default function DashboardShell({
   const canSeePharmacyMenu =
     isAdmin || isPharmacyManager;
 
+  const canCreateIntervention =
+    isAdmin ||
+    isChefCentre ||
+    isAdjointChefCentre ||
+    isFirefighter;
+
+  const canSeeInterventionTracking =
+    isAdmin ||
+    isChefCentre ||
+    isAdjointChefCentre;
+
   const isActive = (href: string) =>
     href === "/dashboard"
       ? pathname === href
@@ -492,6 +504,39 @@ export default function DashboardShell({
                     label="Suivi des gardes"
                     open={isSidebarOpen}
                     active={isActive("/dashboard/disponibilites/suivi")}
+                  />
+                )}
+              </SidebarSection>
+
+              <SidebarSection
+                title="Interventions"
+                open={isSidebarOpen}
+              >
+                <SidebarItem
+                  href="/dashboard/interventions"
+                  icon={Truck}
+                  label="Interventions"
+                  open={isSidebarOpen}
+                  active={pathname === "/dashboard/interventions"}
+                />
+
+                {canCreateIntervention && (
+                  <SidebarItem
+                    href="/dashboard/interventions/nouvelle"
+                    icon={FilePlus2}
+                    label="Créer une intervention"
+                    open={isSidebarOpen}
+                    active={isActive("/dashboard/interventions/nouvelle")}
+                  />
+                )}
+
+                {canSeeInterventionTracking && (
+                  <SidebarItem
+                    href="/dashboard/interventions/suivi"
+                    icon={BarChart3}
+                    label="Suivi des interventions"
+                    open={isSidebarOpen}
+                    active={isActive("/dashboard/interventions/suivi")}
                   />
                 )}
               </SidebarSection>
@@ -629,6 +674,40 @@ export default function DashboardShell({
                         onNavigate={() =>
                           setIsMobileMoreOpen(false)
                         }
+                      />
+                    )}
+                  </div>
+                </section>
+
+                <section>
+                  <p className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.16em] text-red-500">
+                    Interventions
+                  </p>
+
+                  <div className="grid gap-2">
+                    <MobileMoreLink
+                      href="/dashboard/interventions"
+                      icon={Truck}
+                      label="Interventions"
+                      emphasized
+                      onNavigate={() => setIsMobileMoreOpen(false)}
+                    />
+
+                    {canCreateIntervention && (
+                      <MobileMoreLink
+                        href="/dashboard/interventions/nouvelle"
+                        icon={FilePlus2}
+                        label="Créer une intervention"
+                        onNavigate={() => setIsMobileMoreOpen(false)}
+                      />
+                    )}
+
+                    {canSeeInterventionTracking && (
+                      <MobileMoreLink
+                        href="/dashboard/interventions/suivi"
+                        icon={BarChart3}
+                        label="Suivi des interventions"
+                        onNavigate={() => setIsMobileMoreOpen(false)}
                       />
                     )}
                   </div>

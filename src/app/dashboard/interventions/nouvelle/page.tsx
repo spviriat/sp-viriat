@@ -59,11 +59,17 @@ type SelectedPerson = {
   origine: "garde" | "manuel" | "observateur";
 };
 
+type VictimDetail = {
+  etat: "" | "indemne" | "blesse_leger" | "blesse_grave" | "decede";
+  informations: string;
+};
+
 type FormState = {
   numeroCodis: string;
   dateIntervention: string;
   heureBip: string;
   heureDepart: string;
+  dateRetour: string;
   heureRetour: string;
 
   categorie: CategoryKey | "";
@@ -73,7 +79,7 @@ type FormState = {
   lieu: string;
 
   nombreVictimes: number;
-  informationsVictimes: string;
+  victimesDetails: VictimDetail[];
 
   moyensExterieurs: string[];
   autreMoyenExterieur: string;
@@ -112,6 +118,9 @@ const interventionTypes: Record<
       "Feu PL non TMD",
       "Feu PL TMD",
       "Feu de végétation",
+      "Feu de poubelle",
+      "Feu de cheminée",
+      "Autre",
     ],
   },
 
@@ -131,6 +140,7 @@ const interventionTypes: Record<
       "Hyménoptère",
       "Inondation",
       "Manœuvre",
+      "Capture d'animaux",
     ],
   },
 };
@@ -182,14 +192,14 @@ function displayName(
 
 function getGuardRoleLabel(type: string) {
   if (type === "first_departure") {
-    return "1er départ";
+    return "premier_depart";
   }
 
   if (type === "second_departure") {
-    return "2e départ";
+    return "deuxieme_depart";
   }
 
-  return "Équipier";
+  return "equipier";
 }
 
 /* =========================================================
@@ -200,12 +210,15 @@ export default function NewInterventionPage() {
   const router = useRouter();
 
   const [userId, setUserId] = useState<string | null>(null);
+  const [isObserver, setIsObserver] = useState(false);
+  const [accessChecked, setAccessChecked] = useState(false);
 
   const [form, setForm] = useState<FormState>({
     numeroCodis: "",
     dateIntervention: today(),
     heureBip: currentTime(),
     heureDepart: currentTime(),
+    dateRetour: today(),
     heureRetour: "",
 
     categorie: "",
@@ -215,7 +228,7 @@ export default function NewInterventionPage() {
     lieu: "",
 
     nombreVictimes: 0,
-    informationsVictimes: "",
+    victimesDetails: [],
 
     moyensExterieurs: [],
     autreMoyenExterieur: "",
@@ -262,6 +275,45 @@ export default function NewInterventionPage() {
 
         setUserId(session.user.id);
 
+        // Vérifie si l'utilisateur possède le rôle métier Observateur.
+        const { data: businessRoleRows, error: businessRoleError } =
+          await supabase
+            .from("profile_business_roles")
+            .select(
+              `
+              business_roles (
+                code
+              )
+            `
+            )
+            .eq("profile_id", session.user.id);
+
+        if (businessRoleError) {
+          throw new Error(
+            businessRoleError.message ||
+              "Impossible de vérifier les droits d'accès."
+          );
+        }
+
+        const roleCodes = (businessRoleRows ?? [])
+          .map((row: any) => {
+            const role = Array.isArray(row.business_roles)
+              ? row.business_roles[0]
+              : row.business_roles;
+
+            return role?.code ?? null;
+          })
+          .filter(Boolean);
+
+        const observer = roleCodes.includes("observateur");
+
+        setIsObserver(observer);
+        setAccessChecked(true);
+
+        if (observer) {
+          return;
+        }
+
         /*
          * Liste des pompiers pour l'ajout manuel.
          *
@@ -305,6 +357,42 @@ export default function NewInterventionPage() {
     }));
   };
 
+  const updateVictimCount = (count: number) => {
+    const safeCount = Math.max(0, Math.floor(count || 0));
+
+    setForm((previous) => {
+      const nextVictims = Array.from(
+        { length: safeCount },
+        (_, index) =>
+          previous.victimesDetails[index] ?? {
+            etat: "",
+            informations: "",
+          }
+      );
+
+      return {
+        ...previous,
+        nombreVictimes: safeCount,
+        victimesDetails: nextVictims,
+      };
+    });
+  };
+
+  const updateVictim = (
+    index: number,
+    patch: Partial<VictimDetail>
+  ) => {
+    setForm((previous) => ({
+      ...previous,
+      victimesDetails: previous.victimesDetails.map(
+        (victim, victimIndex) =>
+          victimIndex === index
+            ? { ...victim, ...patch }
+            : victim
+      ),
+    }));
+  };
+
   const selectedCategory = useMemo(() => {
     if (!form.categorie) {
       return null;
@@ -312,6 +400,21 @@ export default function NewInterventionPage() {
 
     return interventionTypes[form.categorie];
   }, [form.categorie]);
+
+  const changeInterventionDate = (value: string) => {
+    setForm((previous) => ({
+      ...previous,
+      dateIntervention: value,
+      // À la création, le retour reste le même jour par défaut.
+      // Si l'utilisateur avait encore la même date de retour que l'ancienne
+      // date d'intervention, on la décale avec la nouvelle date.
+      dateRetour:
+        !previous.dateRetour ||
+        previous.dateRetour === previous.dateIntervention
+          ? value
+          : previous.dateRetour,
+    }));
+  };
 
   /* =======================================================
      PERSONNEL DE GARDE AUTOMATIQUE
@@ -472,7 +575,7 @@ export default function NewInterventionPage() {
             profileId: observer.profile_id,
             firstName: observer.first_name ?? "",
             lastName: observer.last_name ?? "",
-            roleEngagement: "Observateur",
+            roleEngagement: "observateur",
             origine: "observateur",
           },
         ];
@@ -522,7 +625,7 @@ export default function NewInterventionPage() {
           profileId: profile.id,
           firstName: profile.first_name ?? "",
           lastName: profile.last_name ?? "",
-          roleEngagement: "Équipier",
+          roleEngagement: "equipier",
           origine: "manuel",
         },
       ];
@@ -597,6 +700,18 @@ export default function NewInterventionPage() {
       return "L'heure de départ est obligatoire.";
     }
 
+    if (form.heureRetour && !form.dateRetour) {
+      return "La date de retour est obligatoire si une heure de retour est renseignée.";
+    }
+
+    if (
+      form.dateRetour &&
+      form.dateIntervention &&
+      form.dateRetour < form.dateIntervention
+    ) {
+      return "La date de retour ne peut pas être antérieure à la date de l'intervention.";
+    }
+
     if (!form.categorie) {
       return "Sélectionne le type d'intervention.";
     }
@@ -616,6 +731,14 @@ export default function NewInterventionPage() {
     status: "brouillon" | "terminee"
   ) => {
     if (!userId || isSaving) {
+      return;
+    }
+
+    if (isObserver) {
+      setErrorMessage(
+        "Les observateurs ne peuvent pas créer de fiche d'intervention."
+      );
+      setConfirmValidation(false);
       return;
     }
 
@@ -648,6 +771,11 @@ export default function NewInterventionPage() {
             heure_bip: form.heureBip || null,
             heure_depart: form.heureDepart,
 
+            date_retour:
+              form.heureRetour
+                ? form.dateRetour || form.dateIntervention
+                : null,
+
             heure_retour:
               form.heureRetour || null,
 
@@ -663,8 +791,32 @@ export default function NewInterventionPage() {
             nombre_victimes:
               form.nombreVictimes,
 
+            // On conserve également un résumé lisible dans l'ancien champ texte.
             informations_victimes:
-              form.informationsVictimes.trim() || null,
+              form.victimesDetails.length
+                ? form.victimesDetails
+                    .map((victim, index) => {
+                      const stateLabels: Record<string, string> = {
+                        indemne: "Indemne",
+                        blesse_leger: "Blessé léger",
+                        blesse_grave: "Blessé grave",
+                        decede: "Décédé",
+                      };
+
+                      const state =
+                        stateLabels[victim.etat] || "État non renseigné";
+                      const information =
+                        victim.informations.trim();
+
+                      return `Victime ${index + 1} — ${state}${
+                        information ? ` : ${information}` : ""
+                      }`;
+                    })
+                    .join("\n")
+                : null,
+
+            victimes_details:
+              form.victimesDetails,
 
             moyens_exterieurs:
               form.moyensExterieurs.length
@@ -706,27 +858,26 @@ export default function NewInterventionPage() {
        * 2. Personnel engagé
        */
       if (personnel.length > 0) {
-        const { error: personnelError } = await supabase
-          .from("intervention_personnel")
-          .insert(
-            personnel.map((person) => ({
-              intervention_id: interventionId,
+  const personnelRows = personnel.map((person) => ({
+    intervention_id: interventionId,
+    profile_id: person.profileId,
+    role_engagement: person.roleEngagement,
+    origine: person.origine,
+  }));
 
-              profil_id: person.profileId,
+  console.log("PERSONNEL À ENREGISTRER :", personnel);
+  console.log("PERSONNEL ROWS :", personnelRows);
 
-              role_engagement:
-                person.roleEngagement,
+  const { error: personnelError } = await supabase
+    .from("intervention_personnel")
+    .insert(personnelRows);
 
-              origine: person.origine,
-            }))
-          );
-
-        if (personnelError) {
-          throw new Error(
-            `La fiche a été créée mais le personnel n'a pas pu être enregistré : ${personnelError.message}`
-          );
-        }
-      }
+  if (personnelError) {
+    throw new Error(
+      `La fiche a été créée mais le personnel n'a pas pu être enregistré : ${personnelError.message}`
+    );
+  }
+}
 
       /*
        * 3. Engins
@@ -772,7 +923,7 @@ export default function NewInterventionPage() {
      LOADING
   ======================================================= */
 
-  if (isLoading) {
+  if (isLoading || !accessChecked) {
     return (
       <div className="app-page flex min-h-screen items-center justify-center">
         <div className="text-center">
@@ -782,6 +933,47 @@ export default function NewInterventionPage() {
             Préparation de la fiche...
           </p>
         </div>
+      </div>
+    );
+  }
+
+  /* =======================================================
+     ACCÈS OBSERVATEUR
+  ======================================================= */
+
+  if (isObserver) {
+    return (
+      <div className="app-page min-h-screen">
+        <main className="mx-auto flex min-h-[70vh] w-full max-w-3xl items-center justify-center p-4 sm:p-6">
+          <section className="w-full rounded-3xl border border-red-500/30 bg-card p-6 text-center shadow-sm sm:p-10">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+              <Shield size={26} />
+            </div>
+
+            <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-red-500">
+              Accès restreint
+            </p>
+
+            <h1 className="mt-2 text-2xl font-black sm:text-3xl">
+              Création de fiche non autorisée
+            </h1>
+
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
+              Les observateurs peuvent consulter l&apos;historique des
+              interventions, mais ne peuvent pas créer, enregistrer ou valider
+              une fiche d&apos;intervention.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => router.replace("/dashboard/interventions")}
+              className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 text-sm font-black text-white transition hover:bg-red-700"
+            >
+              <ArrowLeft size={18} />
+              Retour aux interventions
+            </button>
+          </section>
+        </main>
       </div>
     );
   }
@@ -848,7 +1040,7 @@ export default function NewInterventionPage() {
             eyebrow="Informations"
             title="Intervention"
           >
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               <Field label="N° inter CODIS">
                 <input
                   value={form.numeroCodis}
@@ -871,10 +1063,7 @@ export default function NewInterventionPage() {
                   type="date"
                   value={form.dateIntervention}
                   onChange={(event) =>
-                    updateForm(
-                      "dateIntervention",
-                      event.target.value
-                    )
+                    changeInterventionDate(event.target.value)
                   }
                   className="app-input"
                 />
@@ -907,6 +1096,21 @@ export default function NewInterventionPage() {
                   onChange={(event) =>
                     updateForm(
                       "heureDepart",
+                      event.target.value
+                    )
+                  }
+                  className="app-input"
+                />
+              </Field>
+
+              <Field label="Date retour">
+                <input
+                  type="date"
+                  min={form.dateIntervention || undefined}
+                  value={form.dateRetour}
+                  onChange={(event) =>
+                    updateForm(
+                      "dateRetour",
                       event.target.value
                     )
                   }
@@ -1222,27 +1426,27 @@ export default function NewInterventionPage() {
                         }
                         className="app-input min-w-0 flex-1 sm:w-40"
                       >
-                        <option value="1er départ">
+                        <option value="premier_depart">
                           1er départ
                         </option>
 
-                        <option value="2e départ">
+                        <option value="deuxieme_depart">
                           2e départ
                         </option>
 
-                        <option value="Équipier">
+                        <option value="equipier">
                           Équipier
                         </option>
 
-                        <option value="Chef d'agrès">
+                        <option value="chef_agres">
                           Chef d&apos;agrès
                         </option>
 
-                        <option value="Conducteur">
+                        <option value="conducteur">
                           Conducteur
                         </option>
 
-                        <option value="Observateur">
+                        <option value="observateur">
                           Observateur
                         </option>
                       </select>
@@ -1333,40 +1537,112 @@ export default function NewInterventionPage() {
             eyebrow="Personnes"
             title="Victimes / personnes impliquées"
           >
-            <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
+            <div className="max-w-[220px]">
               <Field label="Nombre de victimes">
                 <input
                   type="number"
                   min={0}
                   value={form.nombreVictimes}
                   onChange={(event) =>
-                    updateForm(
-                      "nombreVictimes",
-                      Math.max(
-                        0,
-                        Number(event.target.value)
-                      )
+                    updateVictimCount(
+                      Number(event.target.value)
                     )
                   }
                   className="app-input"
                 />
               </Field>
-
-              <Field label="Informations victimes">
-                <textarea
-                  value={form.informationsVictimes}
-                  onChange={(event) =>
-                    updateForm(
-                      "informationsVictimes",
-                      event.target.value
-                    )
-                  }
-                  rows={4}
-                  placeholder="Informations utiles concernant les victimes ou personnes impliquées..."
-                  className="app-input resize-y"
-                />
-              </Field>
             </div>
+
+            {form.nombreVictimes > 0 && (
+              <div className="mt-5 grid gap-4">
+                {form.victimesDetails.map((victim, index) => (
+                  <div
+                    key={index}
+                    className="rounded-2xl border border-border bg-background/40 p-4 sm:p-5"
+                  >
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <p className="text-sm font-black uppercase tracking-wider">
+                        Victime {index + 1}
+                      </p>
+
+                      {victim.etat && (
+                        <span className="rounded-full border border-border px-3 py-1 text-xs font-bold text-muted-foreground">
+                          État renseigné
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="mb-2 text-xs font-black uppercase tracking-wider text-muted-foreground">
+                        État de la victime
+                      </p>
+
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        {[
+                          {
+                            value: "indemne",
+                            label: "🟢 Indemne",
+                          },
+                          {
+                            value: "blesse_leger",
+                            label: "🟡 Blessé léger",
+                          },
+                          {
+                            value: "blesse_grave",
+                            label: "🔴 Blessé grave",
+                          },
+                          {
+                            value: "decede",
+                            label: "⚫ Décédé",
+                          },
+                        ].map((option) => {
+                          const selected =
+                            victim.etat === option.value;
+
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() =>
+                                updateVictim(index, {
+                                  etat: selected
+                                    ? ""
+                                    : (option.value as VictimDetail["etat"]),
+                                })
+                              }
+                              className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-bold transition active:scale-[0.98] ${
+                                selected
+                                  ? "border-red-500 bg-red-500/10 text-foreground ring-1 ring-red-500/30"
+                                  : "border-border bg-card text-muted-foreground hover:border-red-500/50 hover:text-foreground"
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <Field label="Informations">
+                        <textarea
+                          value={victim.informations}
+                          onChange={(event) =>
+                            updateVictim(index, {
+                              informations:
+                                event.target.value,
+                            })
+                          }
+                          rows={3}
+                          placeholder={`Informations complémentaires concernant la victime ${index + 1}...`}
+                          className="app-input min-h-[110px] w-full resize-y"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </FormSection>
 
           {/* =================================================
@@ -1523,6 +1799,12 @@ export default function NewInterventionPage() {
                 <span>
                   Départ {form.heureDepart}
                 </span>
+
+                {form.heureRetour && (
+                  <span>
+                    Retour {form.dateRetour} à {form.heureRetour}
+                  </span>
+                )}
 
                 <span>
                   {personnel.length} pompier
