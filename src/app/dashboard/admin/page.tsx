@@ -24,6 +24,7 @@ type UserProfile = {
   phone: string | null;
   role: string | null;
   access_role: AccessRole;
+  access_status: "active" | "suspended" | "archived";
   status: string | null;
   business_roles: BusinessRole[];
 };
@@ -259,6 +260,9 @@ export default function AdminPage() {
   const [isSaving, setIsSaving] =
     useState(false);
 
+  const [isUpdatingAccess, setIsUpdatingAccess] =
+    useState(false);
+
   const [
     isCreateDialogOpen,
     setIsCreateDialogOpen,
@@ -456,6 +460,7 @@ export default function AdminPage() {
             phone,
             role,
             access_role,
+            access_status,
             status
           `)
           .order(
@@ -1435,6 +1440,205 @@ const toggleBusinessRole = (
 
   /*
    * =====================================================
+   * SUSPENSION / RÉACTIVATION DE L'ACCÈS
+   * =====================================================
+   */
+
+  const handleToggleAccess = async () => {
+    if (!selectedUser || (!currentUserIsAdmin && !isCommandMember)) {
+      return;
+    }
+
+    if (selectedUser.id === currentUserId) {
+      setErrorMessage(
+        "Vous ne pouvez pas modifier l'accès de votre propre compte."
+      );
+      return;
+    }
+
+    if (selectedUser.access_role === "admin") {
+      setErrorMessage(
+        "Un compte administrateur ne peut pas être suspendu."
+      );
+      return;
+    }
+
+    const nextStatus =
+      selectedUser.access_status === "suspended"
+        ? "active"
+        : "suspended";
+
+    setIsUpdatingAccess(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        setErrorMessage(
+          "Votre session a expiré. Veuillez vous reconnecter."
+        );
+        return;
+      }
+
+      const response = await fetch("/api/admin/users/access", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          accessStatus: nextStatus,
+        }),
+      });
+
+      const result = (await response.json()) as {
+        error?: string;
+        message?: string;
+        accessStatus?: "active" | "suspended" | "archived";
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ??
+            "Impossible de modifier l'accès de cet utilisateur."
+        );
+      }
+
+      const updatedUser: UserProfile = {
+        ...selectedUser,
+        access_status: result.accessStatus ?? nextStatus,
+      };
+
+      setSelectedUser(updatedUser);
+      setUsers((currentUsers) =>
+        currentUsers.map((user) =>
+          user.id === updatedUser.id ? updatedUser : user
+        )
+      );
+
+      setSuccessMessage(
+        result.message ??
+          (nextStatus === "suspended"
+            ? `L'accès de ${selectedUser.first_name} ${selectedUser.last_name} a été suspendu.`
+            : `L'accès de ${selectedUser.first_name} ${selectedUser.last_name} a été réactivé.`)
+      );
+    } catch (error) {
+      console.error("Erreur modification accès :", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Impossible de modifier l'accès de cet utilisateur."
+      );
+    } finally {
+      setIsUpdatingAccess(false);
+    }
+  };
+
+  const handleArchiveUser = async () => {
+    if (!selectedUser || (!currentUserIsAdmin && !isCommandMember)) {
+      return;
+    }
+
+    if (selectedUser.id === currentUserId) {
+      setErrorMessage(
+        "Vous ne pouvez pas archiver votre propre compte."
+      );
+      return;
+    }
+
+    if (selectedUser.access_role === "admin") {
+      setErrorMessage(
+        "Un compte administrateur ne peut pas être archivé."
+      );
+      return;
+    }
+
+    const nextStatus =
+      selectedUser.access_status === "archived"
+        ? "active"
+        : "archived";
+
+    setIsUpdatingAccess(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        setErrorMessage(
+          "Votre session a expiré. Veuillez vous reconnecter."
+        );
+        return;
+      }
+
+      const response = await fetch("/api/admin/users/access", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          accessStatus: nextStatus,
+        }),
+      });
+
+      const result = (await response.json()) as {
+        error?: string;
+        message?: string;
+        accessStatus?: "active" | "suspended" | "archived";
+        archivedAt?: string | null;
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ??
+            "Impossible de modifier l'archivage de cet utilisateur."
+        );
+      }
+
+      const updatedUser: UserProfile = {
+        ...selectedUser,
+        access_status: result.accessStatus ?? nextStatus,
+      };
+
+      setSelectedUser(updatedUser);
+      setUsers((currentUsers) =>
+        currentUsers.map((user) =>
+          user.id === updatedUser.id ? updatedUser : user
+        )
+      );
+
+      setSuccessMessage(
+        result.message ??
+          (nextStatus === "archived"
+            ? `${selectedUser.first_name} ${selectedUser.last_name} a été archivé.`
+            : `${selectedUser.first_name} ${selectedUser.last_name} a été restauré.`)
+      );
+    } catch (error) {
+      console.error("Erreur archivage utilisateur :", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Impossible de modifier l'archivage de cet utilisateur."
+      );
+    } finally {
+      setIsUpdatingAccess(false);
+    }
+  };
+
+  /*
+   * =====================================================
    * SUPPRESSION
    * =====================================================
    */
@@ -1818,6 +2022,22 @@ const toggleBusinessRole = (
                           "admin"
                             ? "Administrateur"
                             : "Utilisateur"}
+                        </span>
+
+                        <span
+                          className={
+                            user.access_status === "suspended"
+                              ? "rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                              : user.access_status === "archived"
+                                ? "rounded-full bg-slate-200 px-3 py-1 text-xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+                                : "rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                          }
+                        >
+                          {user.access_status === "suspended"
+                            ? "🔴 Accès suspendu"
+                            : user.access_status === "archived"
+                              ? "⚫ Archivé"
+                              : "🟢 Compte actif"}
                         </span>
 
                         {protectedAdmin && (
@@ -2304,6 +2524,69 @@ const toggleBusinessRole = (
             </div>
 
             {/* =============================================
+                ÉTAT DU COMPTE
+            ============================================= */}
+
+            <div className="mt-8 border-t border-slate-200 pt-8 dark:border-slate-800">
+              <h3 className="text-lg font-black">
+                État du compte
+              </h3>
+
+              <div
+                className={
+                  selectedUser.access_status === "suspended"
+                    ? "mt-4 rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-900 dark:bg-red-950/30"
+                    : selectedUser.access_status === "archived"
+                      ? "mt-4 rounded-2xl border border-slate-300 bg-slate-100 p-5 dark:border-slate-700 dark:bg-slate-800/60"
+                      : "mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-900 dark:bg-emerald-950/30"
+                }
+              >
+                <p className="font-black">
+                  {selectedUser.access_status === "suspended"
+                    ? "🔴 Accès suspendu"
+                    : selectedUser.access_status === "archived"
+                      ? "⚫ Compte archivé"
+                      : "🟢 Compte actif"}
+                </p>
+
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                  {selectedUser.access_status === "suspended"
+                    ? "Cet utilisateur ne peut plus accéder à l'application tant que son compte n'est pas réactivé."
+                    : selectedUser.access_status === "archived"
+                      ? "Ce compte est archivé et ne peut plus accéder à l'application. Son historique est conservé."
+                      : "Cet utilisateur dispose actuellement d'un accès autorisé à l'application."}
+                </p>
+
+                {(currentUserIsAdmin || isCommandMember) &&
+                  selectedUser.id !== currentUserId &&
+                  selectedUser.access_role !== "admin" &&
+                  selectedUser.access_status !== "archived" && (
+                    <button
+                      type="button"
+                      disabled={
+                        isUpdatingAccess ||
+                        isSaving ||
+                        isDeleting ||
+                        isUpdatingEmail
+                      }
+                      onClick={() => void handleToggleAccess()}
+                      className={
+                        selectedUser.access_status === "suspended"
+                          ? "mt-4 rounded-2xl bg-emerald-600 px-5 py-3 font-black text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                          : "mt-4 rounded-2xl bg-red-600 px-5 py-3 font-black text-white transition hover:bg-red-700 disabled:opacity-50"
+                      }
+                    >
+                      {isUpdatingAccess
+                        ? "Modification..."
+                        : selectedUser.access_status === "suspended"
+                          ? "Réactiver l'accès"
+                          : "Suspendre l'accès"}
+                    </button>
+                  )}
+              </div>
+            </div>
+
+            {/* =============================================
                 RÔLES MÉTIER
             ============================================= */}
 
@@ -2430,6 +2713,56 @@ const toggleBusinessRole = (
                 )}
               </div>
             </div>
+
+            {/* =============================================
+                ARCHIVAGE
+            ============================================= */}
+
+            {(currentUserIsAdmin || isCommandMember) &&
+              selectedUser.id !== currentUserId &&
+              selectedUser.access_role !== "admin" && (
+                <div className="mt-10 border-t border-amber-200 pt-8 dark:border-amber-900/60">
+                  <div className="rounded-3xl border border-amber-300 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/20 sm:p-6">
+                    <p className="text-xs font-black uppercase tracking-widest text-amber-600">
+                      Gestion du personnel
+                    </p>
+
+                    <h3 className="mt-2 text-lg font-black text-amber-800 dark:text-amber-300">
+                      {selectedUser.access_status === "archived"
+                        ? "Restaurer cet utilisateur"
+                        : "Archiver cet utilisateur"}
+                    </h3>
+
+                    <p className="mt-2 text-sm leading-6 text-amber-800/80 dark:text-amber-300/80">
+                      {selectedUser.access_status === "archived"
+                        ? "Le compte sera restauré et l'utilisateur pourra de nouveau accéder à l'application."
+                        : "Le compte sera désactivé sans être supprimé. Son historique, ses interventions et ses informations seront conservés."}
+                    </p>
+
+                    <button
+                      type="button"
+                      disabled={
+                        isUpdatingAccess ||
+                        isSaving ||
+                        isDeleting ||
+                        isUpdatingEmail
+                      }
+                      onClick={() => void handleArchiveUser()}
+                      className={
+                        selectedUser.access_status === "archived"
+                          ? "mt-5 rounded-2xl bg-emerald-600 px-5 py-3 font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          : "mt-5 rounded-2xl border-2 border-amber-600 px-5 py-3 font-black text-amber-700 transition hover:bg-amber-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 dark:text-amber-400"
+                      }
+                    >
+                      {isUpdatingAccess
+                        ? "Modification..."
+                        : selectedUser.access_status === "archived"
+                          ? "↩️ Restaurer l'utilisateur"
+                          : "📦 Archiver l'utilisateur"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
             {/* =============================================
                 ZONE DE DANGER

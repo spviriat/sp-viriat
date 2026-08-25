@@ -270,7 +270,8 @@ export default function DashboardShell({
             access_role,
             theme,
             matricule,
-            status
+            status,
+            access_status
           `)
           .eq("id", session.user.id)
           .single();
@@ -287,6 +288,21 @@ export default function DashboardShell({
 
       if (profileData.status === "temporary_password") {
         router.replace("/auth/complete-profile");
+        return;
+      }
+
+      if (
+        profileData.access_status === "suspended" ||
+        profileData.access_status === "archived"
+      ) {
+        await supabase.auth.signOut({ scope: "local" });
+
+        const reason =
+          profileData.access_status === "archived"
+            ? "archived"
+            : "suspended";
+
+        router.replace(`/?access=${reason}`);
         return;
       }
 

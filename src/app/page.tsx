@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 type UserProfileStatus = {
   status: string | null;
+  access_status: "active" | "suspended" | "archived" | null;
 };
 
 export default function Home() {
@@ -73,7 +74,7 @@ export default function Home() {
         error: profileError,
       } = await supabase
         .from("profiles")
-        .select("status")
+        .select("status, access_status")
         .eq("id", data.user.id)
         .single<UserProfileStatus>();
 
@@ -87,6 +88,21 @@ export default function Home() {
 
         setErrorMessage(
           "Votre compte existe, mais votre profil n'a pas pu être chargé. Contactez un administrateur."
+        );
+
+        return;
+      }
+
+      if (
+        profile.access_status === "suspended" ||
+        profile.access_status === "archived"
+      ) {
+        await supabase.auth.signOut({ scope: "local" });
+
+        setErrorMessage(
+          profile.access_status === "archived"
+            ? "Votre compte a été archivé. Contactez un administrateur si vous pensez qu’il s’agit d’une erreur."
+            : "Votre accès à l’application a été suspendu. Contactez un administrateur."
         );
 
         return;
