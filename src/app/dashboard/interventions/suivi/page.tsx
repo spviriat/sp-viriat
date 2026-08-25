@@ -30,6 +30,8 @@ import {
 
   Loader2,
 
+  Printer,
+
   Search,
 
   Shield,
@@ -67,6 +69,18 @@ type Intervention = {
   adresse: string | null;
 
   lieu: string | null;
+
+  nombre_victimes: number | null;
+
+  informations_victimes: string | null;
+
+  moyens_exterieurs: string | null;
+
+  compte_rendu: string | null;
+
+  date_retour: string | null;
+
+  victimes_details: unknown;
 
   statut: string;
 
@@ -162,6 +176,33 @@ function formatDuration(minutes: number | null) {
 
   return `${hours} h ${String(mins).padStart(2, "0")}`;
 
+}
+
+function formatVictimDetails(value: unknown) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((item, index) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const entries = Object.entries(item as Record<string, unknown>)
+            .filter(([, entryValue]) => entryValue !== null && entryValue !== undefined && entryValue !== "")
+            .map(([key, entryValue]) => `${key.replace(/_/g, " ")}: ${String(entryValue)}`);
+          return entries.length > 0 ? `Victime ${index + 1} — ${entries.join(" • ")}` : "";
+        }
+        return String(item);
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([, entryValue]) => entryValue !== null && entryValue !== undefined && entryValue !== "")
+      .map(([key, entryValue]) => `${key.replace(/_/g, " ")}: ${String(entryValue)}`)
+      .join("\n");
+  }
+  return String(value);
 }
 
 function statusLabel(status: string) {
@@ -416,6 +457,7 @@ export default function InterventionSuiviPage() {
 
   const [agentFilter, setAgentFilter] = useState("tous");
 
+  const [viewTarget, setViewTarget] = useState<Intervention | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Intervention | null>(null);
 
   const [deleting, setDeleting] = useState(false);
@@ -549,6 +591,18 @@ export default function InterventionSuiviPage() {
           adresse,
 
           lieu,
+
+          nombre_victimes,
+
+          informations_victimes,
+
+          moyens_exterieurs,
+
+          compte_rendu,
+
+          date_retour,
+
+          victimes_details,
 
           statut,
 
@@ -2334,19 +2388,14 @@ export default function InterventionSuiviPage() {
 
                         <div className="flex justify-end gap-2">
 
-                          <Link
-
-                            href={`/dashboard/interventions/${item.id}`}
-
-                            title="Ouvrir la fiche"
-
+                          <button
+                            type="button"
+                            onClick={() => setViewTarget(item)}
+                            title="Voir le détail de l'intervention"
                             className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-500"
-
                           >
-
                             <Eye size={18} />
-
-                          </Link>
+                          </button>
 
                           <button
 
@@ -2383,6 +2432,93 @@ export default function InterventionSuiviPage() {
         )}
 
       </section>
+
+      {viewTarget && (() => {
+        const creator = profiles[viewTarget.created_by];
+        const creatorName = creator ? `${creator.first_name ?? ""} ${creator.last_name ?? ""}`.trim() : "";
+        const engagedNames = personnelLinks
+          .filter((link) => link.intervention_id === viewTarget.id)
+          .map((link) => profiles[link.profile_id])
+          .filter((profile): profile is Profile => Boolean(profile))
+          .map((profile) => `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim())
+          .filter(Boolean);
+        const victimDetails = formatVictimDetails(viewTarget.victimes_details);
+
+        const printIntervention = () => {
+          const popup = window.open("", "_blank", "width=900,height=1100");
+          if (!popup) return;
+          const esc = (value: unknown) => String(value ?? "—")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+          const row = (label: string, value: unknown) => `<div class="field"><span>${esc(label)}</span><strong>${esc(value || "—")}</strong></div>`;
+          popup.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(viewTarget.numero_interne || "Intervention")}</title><style>
+            *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:32px;line-height:1.35}h1{margin:4px 0 0;font-size:28px}.eyebrow{color:#d71920;font-weight:800;text-transform:uppercase;letter-spacing:.12em;font-size:12px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:24px}.grid.two{grid-template-columns:repeat(2,1fr)}.field,.block{border:1px solid #cbd5e1;border-radius:10px;padding:12px}.field span,.block span{display:block;color:#64748b;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.field strong,.block p{display:block;margin:6px 0 0;font-size:14px;white-space:pre-wrap}.block{margin-top:12px}.footer{margin-top:24px;color:#64748b;font-size:11px}@media print{body{margin:14mm}.no-print{display:none}}@media(max-width:700px){.grid,.grid.two{grid-template-columns:1fr}}
+          </style></head><body><div class="eyebrow">Fiche d'intervention</div><h1>${esc(viewTarget.numero_interne || "Intervention")}</h1>
+          <div class="grid">${row("N° intervention",viewTarget.numero_interne)}${row("N° CODIS",viewTarget.numero_codis)}${row("Date",formatDate(viewTarget.date_intervention))}${row("Heure bip",formatTime(viewTarget.heure_bip))}${row("Départ",formatTime(viewTarget.heure_depart))}${row("Retour",formatTime(viewTarget.heure_retour))}${row("Délai bip → départ",formatDuration(elapsedMinutes(viewTarget.heure_bip,viewTarget.heure_depart)))}${row("Durée intervention",formatDuration(elapsedMinutes(viewTarget.heure_depart,viewTarget.heure_retour)))}${row("Statut",statusLabel(viewTarget.statut))}</div>
+          <div class="grid two">${row("Type",viewTarget.categorie)}${row("Motif",viewTarget.sous_type)}${row("Adresse",viewTarget.adresse)}${row("Lieu",viewTarget.lieu)}${row("Nombre de victimes",viewTarget.nombre_victimes ?? 0)}${row("Date retour",viewTarget.date_retour ? formatDate(viewTarget.date_retour) : "—")}</div>
+          ${viewTarget.informations_victimes ? `<div class="block"><span>Informations victimes</span><p>${esc(viewTarget.informations_victimes)}</p></div>` : ""}
+          ${victimDetails ? `<div class="block"><span>Détails victimes</span><p>${esc(victimDetails)}</p></div>` : ""}
+          ${viewTarget.moyens_exterieurs ? `<div class="block"><span>Moyens extérieurs</span><p>${esc(viewTarget.moyens_exterieurs)}</p></div>` : ""}
+          ${viewTarget.compte_rendu ? `<div class="block"><span>Compte rendu</span><p>${esc(viewTarget.compte_rendu)}</p></div>` : ""}
+          <div class="block"><span>Agents engagés</span><p>${esc(engagedNames.length ? engagedNames.join(", ") : "Aucun agent renseigné")}</p></div><div class="block"><span>Fiche créée par</span><p>${esc(creatorName || "—")}</p></div>
+          <p class="footer">Document généré depuis SP Viriat.</p><script>window.onload=()=>{window.print();}</script></body></html>`);
+          popup.document.close();
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <section className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-border bg-card p-6 shadow-2xl sm:p-7">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-red-500">Fiche d'intervention</p>
+                  <h2 className="mt-2 text-2xl font-black">{viewTarget.numero_interne || "Intervention"}</h2>
+                  <p className="mt-1 text-sm font-semibold text-muted-foreground">Consultation en lecture seule</p>
+                </div>
+                <button type="button" onClick={() => setViewTarget(null)} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground" title="Fermer"><X size={18} /></button>
+              </div>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <DetailField label="N° intervention" value={viewTarget.numero_interne || "—"} />
+                <DetailField label="N° CODIS" value={viewTarget.numero_codis || "—"} />
+                <DetailField label="Date" value={formatDate(viewTarget.date_intervention)} />
+                <DetailField label="Heure bip" value={formatTime(viewTarget.heure_bip)} />
+                <DetailField label="Départ" value={formatTime(viewTarget.heure_depart)} />
+                <DetailField label="Retour" value={formatTime(viewTarget.heure_retour)} />
+                <DetailField label="Délai bip → départ" value={formatDuration(elapsedMinutes(viewTarget.heure_bip, viewTarget.heure_depart))} />
+                <DetailField label="Durée intervention" value={formatDuration(elapsedMinutes(viewTarget.heure_depart, viewTarget.heure_retour))} />
+                <DetailField label="Statut" value={statusLabel(viewTarget.statut)} />
+              </div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <DetailField label="Type" value={viewTarget.categorie || "—"} />
+                <DetailField label="Motif" value={viewTarget.sous_type || "—"} />
+                <DetailField label="Adresse" value={viewTarget.adresse || "—"} />
+                <DetailField label="Lieu" value={viewTarget.lieu || "—"} />
+              </div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <DetailField label="Nombre de victimes" value={String(viewTarget.nombre_victimes ?? 0)} />
+                {viewTarget.date_retour && <DetailField label="Date retour" value={formatDate(viewTarget.date_retour)} />}
+              </div>
+              {viewTarget.informations_victimes && <DetailText label="Informations victimes" value={viewTarget.informations_victimes} />}
+              {victimDetails && <DetailText label="Détails victimes" value={victimDetails} />}
+              {viewTarget.moyens_exterieurs && <DetailText label="Moyens extérieurs" value={viewTarget.moyens_exterieurs} />}
+              {viewTarget.compte_rendu && <DetailText label="Compte rendu" value={viewTarget.compte_rendu} />}
+              <div className="mt-4 rounded-2xl border border-border bg-background/50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Agents engagés</p>
+                <p className="mt-2 text-sm font-bold">{engagedNames.length > 0 ? engagedNames.join(", ") : "Aucun agent renseigné"}</p>
+              </div>
+              <div className="mt-4 rounded-2xl border border-border bg-background/50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Fiche créée par</p>
+                <p className="mt-2 text-sm font-bold">{creatorName || "—"}</p>
+              </div>
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button type="button" onClick={() => setViewTarget(null)} className="min-h-12 rounded-xl border border-border px-6 text-sm font-black transition hover:bg-muted">Fermer</button>
+                <button type="button" onClick={printIntervention} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-6 text-sm font-black text-white transition hover:bg-red-700"><Printer size={18} /> Télécharger / imprimer</button>
+              </div>
+            </section>
+          </div>
+        );
+      })()}
 
       {deleteTarget && (
 
@@ -2500,6 +2636,24 @@ export default function InterventionSuiviPage() {
 
   );
 
+}
+
+function DetailText({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="mt-4 rounded-2xl border border-border bg-background/50 p-4">
+      <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-2 whitespace-pre-wrap break-words text-sm font-bold">{value}</p>
+    </div>
+  );
+}
+
+function DetailField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-background/50 p-4">
+      <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-2 break-words text-sm font-black">{value}</p>
+    </div>
+  );
 }
 
 function StatCard({
