@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import WelcomeSection from "@/components/dashboard/WelcomeSection";
@@ -10,7 +10,7 @@ import NextDuty from "@/components/dashboard/NextDuty";
 import { useDashboardShell } from "@/components/dashboard/DashboardShell";
 import { supabase } from "@/lib/supabase";
 
-const quickAccessItems = [
+const firefighterQuickAccessItems = [
   {
     title: "Interventions",
     icon: "🚒",
@@ -41,6 +41,30 @@ const quickAccessItems = [
     title: "Événements indésirables",
     icon: "⚠️",
     href: "/dashboard/evenements-indesirables",
+  },
+  {
+    title: "Documents",
+    icon: "📁",
+    href: "/dashboard/documents",
+  },
+  {
+    title: "Annuaire",
+    icon: "👥",
+    href: "/dashboard/annuaire",
+  },
+];
+
+const amicalisteQuickAccessItems = [
+  {
+    title: "Mon sac",
+    icon: "🎒",
+    href: "/dashboard/sac",
+  },
+  {
+    title: "Actualités",
+    icon: "📰",
+    href: "/dashboard/actualites",
+    hasNotification: true,
   },
   {
     title: "Documents",
@@ -92,6 +116,8 @@ function formatDashboardEvent(
   const [year, month, day] =
     event.event_date.split("-").map(Number);
 
+  void year;
+
   return {
     day: String(day).padStart(2, "0"),
     month: MONTHS[month - 1] ?? "",
@@ -108,6 +134,10 @@ export default function DashboardPage() {
     profile,
     canManageUsers,
     managementLabel,
+    businessRoleCodes,
+    isAdmin,
+    isChefCentre,
+    isAdjointChefCentre,
     isLoggingOut,
     handleLogout,
   } = useDashboardShell();
@@ -115,6 +145,27 @@ export default function DashboardPage() {
   const [upcomingEvents, setUpcomingEvents] = useState<
     UpcomingEventItem[]
   >([]);
+
+  const isFirefighter =
+    businessRoleCodes.includes("sapeur_pompier");
+
+  const isAmicaliste =
+    businessRoleCodes.includes("amicaliste");
+
+  const isAmicalisteOnly =
+    isAmicaliste &&
+    !isFirefighter &&
+    !isAdmin &&
+    !isChefCentre &&
+    !isAdjointChefCentre;
+
+  const quickAccessItems = useMemo(
+    () =>
+      isAmicalisteOnly
+        ? amicalisteQuickAccessItems
+        : firefighterQuickAccessItems,
+    [isAmicalisteOnly]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -203,32 +254,34 @@ export default function DashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.8fr)]">
         <div className="space-y-6">
-          <Link
-            href="/dashboard/verifications"
-            className="flex items-center gap-4 rounded-3xl border border-red-200 bg-red-50 p-5 transition hover:border-red-300 hover:shadow-md active:scale-[0.99] dark:border-red-900 dark:bg-red-950/30"
-          >
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-red-600 text-2xl text-white">
-              ⚠️
-            </div>
+          {!isAmicalisteOnly && (
+            <Link
+              href="/dashboard/verifications"
+              className="flex items-center gap-4 rounded-3xl border border-red-200 bg-red-50 p-5 transition hover:border-red-300 hover:shadow-md active:scale-[0.99] dark:border-red-900 dark:bg-red-950/30"
+            >
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-red-600 text-2xl text-white">
+                ⚠️
+              </div>
 
-            <div className="min-w-0 flex-1">
-              <p className="font-bold text-red-600">
-                Rappel important
-              </p>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-red-600">
+                  Rappel important
+                </p>
 
-              <h2 className="mt-1 text-lg font-extrabold">
-                Vérification des ARI
-              </h2>
+                <h2 className="mt-1 text-lg font-extrabold">
+                  Vérification des ARI
+                </h2>
 
-              <p className="mt-1 text-sm text-muted-foreground">
-                Pense à vérifier ton ARI avant la garde.
-              </p>
-            </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pense à vérifier ton ARI avant la garde.
+                </p>
+              </div>
 
-            <span className="text-3xl text-red-600">
-              ›
-            </span>
-          </Link>
+              <span className="text-3xl text-red-600">
+                ›
+              </span>
+            </Link>
+          )}
 
           <QuickAccess items={quickAccessItems} />
 
@@ -236,31 +289,33 @@ export default function DashboardPage() {
         </div>
 
         <aside className="space-y-6">
-          <NextDuty />
+          {!isAmicalisteOnly && <NextDuty />}
 
-          <Link
-            href="/dashboard/notifications"
-            className="flex items-center gap-4 rounded-3xl border border-amber-200 bg-amber-50 p-5 transition hover:shadow-md active:scale-[0.99] dark:border-amber-900 dark:bg-amber-950/30"
-          >
-            <div className="text-3xl">
-              ⚠️
-            </div>
+          {!isAmicalisteOnly && (
+            <Link
+              href="/dashboard/notifications"
+              className="flex items-center gap-4 rounded-3xl border border-amber-200 bg-amber-50 p-5 transition hover:shadow-md active:scale-[0.99] dark:border-amber-900 dark:bg-amber-950/30"
+            >
+              <div className="text-3xl">
+                ⚠️
+              </div>
 
-            <div className="min-w-0 flex-1">
-              <p className="font-extrabold">
-                Pense-bête
-              </p>
+              <div className="min-w-0 flex-1">
+                <p className="font-extrabold">
+                  Pense-bête
+                </p>
 
-              <p className="mt-1 text-sm text-muted-foreground">
-                N&apos;oublie pas ta tenue de sport pour
-                l&apos;entraînement.
-              </p>
-            </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  N&apos;oublie pas ta tenue de sport pour
+                  l&apos;entraînement.
+                </p>
+              </div>
 
-            <span className="text-3xl">
-              ›
-            </span>
-          </Link>
+              <span className="text-3xl">
+                ›
+              </span>
+            </Link>
+          )}
 
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
@@ -275,10 +330,12 @@ export default function DashboardPage() {
               </p>
 
               <p className="text-sm font-medium capitalize text-red-600">
-                {profile?.role || "Utilisateur"}
+                {isAmicalisteOnly
+                  ? "Amicaliste"
+                  : profile?.role || "Utilisateur"}
               </p>
 
-              {profile?.grade && (
+              {!isAmicalisteOnly && profile?.grade && (
                 <p className="text-sm text-muted-foreground">
                   {profile.grade}
                 </p>

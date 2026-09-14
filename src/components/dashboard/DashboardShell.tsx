@@ -21,6 +21,7 @@ import {
   FolderOpen,
   House,
   Menu,
+  MessageSquare,
   Newspaper,
   Package,
   Settings,
@@ -427,6 +428,16 @@ export default function DashboardShell({
     isAdjointChefCentre;
   const isFirefighter =
     businessRoleCodes.includes("sapeur_pompier");
+  const isAmicaliste =
+    businessRoleCodes.includes("amicaliste");
+  const isAmicalisteOnly =
+    isAmicaliste &&
+    !isFirefighter &&
+    !isAdmin &&
+    !isChefCentre &&
+    !isAdjointChefCentre;
+  const canSeeOperationalSpace =
+    !isAmicalisteOnly;
   const isPharmacyManager =
     businessRoleCodes.includes(
       "responsable_pharmacie"
@@ -514,7 +525,9 @@ export default function DashboardShell({
                 open={isSidebarOpen}
               >
                 <SidebarItem href="/dashboard" icon={House} label="Accueil" open={isSidebarOpen} active={isActive("/dashboard")} />
-                <SidebarItem href="/dashboard/materiel" icon={Package} label="Mon matériel" open={isSidebarOpen} active={isActive("/dashboard/materiel")} />
+                {canSeeOperationalSpace && (
+                  <SidebarItem href="/dashboard/materiel" icon={Package} label="Mon matériel" open={isSidebarOpen} active={isActive("/dashboard/materiel")} />
+                )}
                 <SidebarItem href="/dashboard/sac" icon={Backpack} label="Mon sac" open={isSidebarOpen} active={isActive("/dashboard/sac")} />
 
                 {canSeeClothingManagement && (
@@ -526,8 +539,12 @@ export default function DashboardShell({
                     active={isActive("/dashboard/habillement")}
                   />
                 )}
-                <SidebarItem href="/dashboard/verifications" icon={ClipboardCheck} label="Vérifications" open={isSidebarOpen} active={isActive("/dashboard/verifications")} />
-                <SidebarItem href="/dashboard/disponibilites" icon={CalendarDays} label="Disponibilités" open={isSidebarOpen} active={pathname === "/dashboard/disponibilites"} />
+                {canSeeOperationalSpace && (
+                  <>
+                    <SidebarItem href="/dashboard/verifications" icon={ClipboardCheck} label="Vérifications" open={isSidebarOpen} active={isActive("/dashboard/verifications")} />
+                    <SidebarItem href="/dashboard/disponibilites" icon={CalendarDays} label="Disponibilités" open={isSidebarOpen} active={pathname === "/dashboard/disponibilites"} />
+                  </>
+                )}
 
                 {canSeeGuardMonitoring && (
                   <SidebarItem
@@ -540,45 +557,49 @@ export default function DashboardShell({
                 )}
               </SidebarSection>
 
-              <SidebarSection
-                title="Interventions"
-                open={isSidebarOpen}
-              >
-                <SidebarItem
-                  href="/dashboard/interventions"
-                  icon={Truck}
-                  label="Interventions"
+              {canSeeOperationalSpace && (
+                <SidebarSection
+                  title="Interventions"
                   open={isSidebarOpen}
-                  active={pathname === "/dashboard/interventions"}
-                />
-
-                {canCreateIntervention && (
+                >
                   <SidebarItem
-                    href="/dashboard/interventions/nouvelle"
-                    icon={FilePlus2}
-                    label="Créer une intervention"
+                    href="/dashboard/interventions"
+                    icon={Truck}
+                    label="Interventions"
                     open={isSidebarOpen}
-                    active={isActive("/dashboard/interventions/nouvelle")}
+                    active={pathname === "/dashboard/interventions"}
                   />
-                )}
 
-                {canSeeInterventionTracking && (
-                  <SidebarItem
-                    href="/dashboard/interventions/suivi"
-                    icon={BarChart3}
-                    label="Suivi des interventions"
-                    open={isSidebarOpen}
-                    active={isActive("/dashboard/interventions/suivi")}
-                  />
-                )}
-              </SidebarSection>
+                  {canCreateIntervention && (
+                    <SidebarItem
+                      href="/dashboard/interventions/nouvelle"
+                      icon={FilePlus2}
+                      label="Créer une intervention"
+                      open={isSidebarOpen}
+                      active={isActive("/dashboard/interventions/nouvelle")}
+                    />
+                  )}
+
+                  {canSeeInterventionTracking && (
+                    <SidebarItem
+                      href="/dashboard/interventions/suivi"
+                      icon={BarChart3}
+                      label="Suivi des interventions"
+                      open={isSidebarOpen}
+                      active={isActive("/dashboard/interventions/suivi")}
+                    />
+                  )}
+                </SidebarSection>
+              )}
 
               <SidebarSection
                 title="Vie de la caserne"
                 open={isSidebarOpen}
               >
                 <SidebarItem href="/dashboard/actualites" icon={Newspaper} label="Actualités" open={isSidebarOpen} badge="1" active={isActive("/dashboard/actualites")} />
-                <SidebarItem href="/dashboard/evenements-indesirables" icon={TriangleAlert} label="Événements indésirables" open={isSidebarOpen} active={isActive("/dashboard/evenements-indesirables")} />
+                {canSeeOperationalSpace && (
+                  <SidebarItem href="/dashboard/evenements-indesirables" icon={TriangleAlert} label="Événements indésirables" open={isSidebarOpen} active={isActive("/dashboard/evenements-indesirables")} />
+                )}
                 <SidebarItem href="/dashboard/documents" icon={FolderOpen} label="Documents" open={isSidebarOpen} active={isActive("/dashboard/documents")} />
                 <SidebarItem href="/dashboard/annuaire" icon={Users} label="Annuaire" open={isSidebarOpen} active={isActive("/dashboard/annuaire")} />
                 <SidebarItem href="/dashboard/planning" icon={CalendarDays} label="Planning" open={isSidebarOpen} active={isActive("/dashboard/planning")} />
@@ -704,8 +725,12 @@ export default function DashboardShell({
                         onNavigate={() => setIsMobileMoreOpen(false)}
                       />
                     )}
-                    <MobileMoreLink href="/dashboard/verifications" icon={ClipboardCheck} label="Vérifications" onNavigate={() => setIsMobileMoreOpen(false)} />
-                    <MobileMoreLink href="/dashboard/disponibilites" icon={CalendarDays} label="Disponibilités" onNavigate={() => setIsMobileMoreOpen(false)} />
+                    {canSeeOperationalSpace && (
+                      <>
+                        <MobileMoreLink href="/dashboard/verifications" icon={ClipboardCheck} label="Vérifications" onNavigate={() => setIsMobileMoreOpen(false)} />
+                        <MobileMoreLink href="/dashboard/disponibilites" icon={CalendarDays} label="Disponibilités" onNavigate={() => setIsMobileMoreOpen(false)} />
+                      </>
+                    )}
 
                     {canSeeGuardMonitoring && (
                       <MobileMoreLink
@@ -720,39 +745,41 @@ export default function DashboardShell({
                   </div>
                 </section>
 
-                <section>
-                  <p className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.16em] text-red-500">
-                    Interventions
-                  </p>
+                {canSeeOperationalSpace && (
+                  <section>
+                    <p className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.16em] text-red-500">
+                      Interventions
+                    </p>
 
-                  <div className="grid gap-2">
-                    <MobileMoreLink
-                      href="/dashboard/interventions"
-                      icon={Truck}
-                      label="Interventions"
-                      emphasized
-                      onNavigate={() => setIsMobileMoreOpen(false)}
-                    />
-
-                    {canCreateIntervention && (
+                    <div className="grid gap-2">
                       <MobileMoreLink
-                        href="/dashboard/interventions/nouvelle"
-                        icon={FilePlus2}
-                        label="Créer une intervention"
+                        href="/dashboard/interventions"
+                        icon={Truck}
+                        label="Interventions"
+                        emphasized
                         onNavigate={() => setIsMobileMoreOpen(false)}
                       />
-                    )}
 
-                    {canSeeInterventionTracking && (
-                      <MobileMoreLink
-                        href="/dashboard/interventions/suivi"
-                        icon={BarChart3}
-                        label="Suivi des interventions"
-                        onNavigate={() => setIsMobileMoreOpen(false)}
-                      />
-                    )}
-                  </div>
-                </section>
+                      {canCreateIntervention && (
+                        <MobileMoreLink
+                          href="/dashboard/interventions/nouvelle"
+                          icon={FilePlus2}
+                          label="Créer une intervention"
+                          onNavigate={() => setIsMobileMoreOpen(false)}
+                        />
+                      )}
+
+                      {canSeeInterventionTracking && (
+                        <MobileMoreLink
+                          href="/dashboard/interventions/suivi"
+                          icon={BarChart3}
+                          label="Suivi des interventions"
+                          onNavigate={() => setIsMobileMoreOpen(false)}
+                        />
+                      )}
+                    </div>
+                  </section>
+                )}
 
                 <section>
                   <p className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
@@ -760,7 +787,9 @@ export default function DashboardShell({
                   </p>
                   <div className="grid gap-2">
                     <MobileMoreLink href="/dashboard/actualites" icon={Newspaper} label="Actualités" badge="1" onNavigate={() => setIsMobileMoreOpen(false)} />
-                    <MobileMoreLink href="/dashboard/evenements-indesirables" icon={TriangleAlert} label="Événements indésirables" onNavigate={() => setIsMobileMoreOpen(false)} />
+                    {canSeeOperationalSpace && (
+                      <MobileMoreLink href="/dashboard/evenements-indesirables" icon={TriangleAlert} label="Événements indésirables" onNavigate={() => setIsMobileMoreOpen(false)} />
+                    )}
                     <MobileMoreLink href="/dashboard/documents" icon={FolderOpen} label="Documents" onNavigate={() => setIsMobileMoreOpen(false)} />
                     <MobileMoreLink href="/dashboard/annuaire" icon={Users} label="Annuaire" onNavigate={() => setIsMobileMoreOpen(false)} />
                     <MobileMoreLink href="/dashboard/planning" icon={CalendarDays} label="Planning" onNavigate={() => setIsMobileMoreOpen(false)} />
@@ -804,11 +833,19 @@ export default function DashboardShell({
         )}
 
         <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-sidebar-border bg-sidebar/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl lg:hidden">
-          <div className="mx-auto grid max-w-2xl grid-cols-5">
-            <MobileBottomLink href="/dashboard" icon="🏠" label="Accueil" active={pathname === "/dashboard"} />
-            <MobileBottomLink href="/dashboard/materiel" icon="🧰" label="Matériel" active={isActive("/dashboard/materiel")} />
-            <MobileBottomLink href="/dashboard/disponibilites" icon="📅" label="Dispos" active={isActive("/dashboard/disponibilites")} />
-            <MobileBottomLink href="/dashboard/messages" icon="💬" label="Messages" badge="1" active={isActive("/dashboard/messages")} />
+          <div className={`mx-auto grid max-w-2xl ${isAmicalisteOnly ? "grid-cols-4" : "grid-cols-5"}`}>
+            <MobileBottomLink href="/dashboard" icon={House} label="Accueil" active={pathname === "/dashboard"} />
+
+            {isAmicalisteOnly ? (
+              <MobileBottomLink href="/dashboard/sac" icon={Backpack} label="Mon sac" active={isActive("/dashboard/sac")} />
+            ) : (
+              <>
+                <MobileBottomLink href="/dashboard/materiel" icon={Package} label="Matériel" active={isActive("/dashboard/materiel")} />
+                <MobileBottomLink href="/dashboard/disponibilites" icon={CalendarDays} label="Dispos" active={isActive("/dashboard/disponibilites")} />
+              </>
+            )}
+
+            <MobileBottomLink href="/dashboard/messages" icon={MessageSquare} label="Messages" badge="1" active={isActive("/dashboard/messages")} />
 
             <button
               type="button"
@@ -817,7 +854,7 @@ export default function DashboardShell({
               }
               className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-muted-foreground"
             >
-              <span className="text-2xl">☰</span>
+              <Menu size={23} strokeWidth={1.9} />
               <span className="text-xs font-semibold">
                 Plus
               </span>
@@ -831,13 +868,13 @@ export default function DashboardShell({
 
 function MobileBottomLink({
   href,
-  icon,
+  icon: Icon,
   label,
   badge,
   active,
 }: {
   href: string;
-  icon: string;
+  icon: LucideIcon;
   label: string;
   badge?: string;
   active?: boolean;
@@ -851,7 +888,7 @@ function MobileBottomLink({
           : "text-muted-foreground"
       }`}
     >
-      <span className="text-2xl">{icon}</span>
+      <Icon size={23} strokeWidth={1.9} />
 
       {badge && (
         <span className="absolute right-[25%] top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Tab = "personnel" | "catalogue" | "demandes" | "restitutions" | "historique";
+type HistoryTab = "demandes" | "restitutions";
 type ClothingCategory = "sapeurs_pompiers" | "amicale" | "les_deux";
 type RequestStatus =
   | "en_attente"
@@ -165,7 +166,9 @@ export default function HabillementPage() {
   const [requests, setRequests] = useState<ClothingRequest[]>([]);
 
   const [search, setSearch] = useState("");
+  const [historyTab, setHistoryTab] = useState<HistoryTab>("demandes");
   const [historyAgentFilter, setHistoryAgentFilter] = useState("");
+  const [returnHistorySearch, setReturnHistorySearch] = useState("");
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [assignments, setAssignments] = useState<ClothingAssignment[]>([]);
   const [assignmentItemId, setAssignmentItemId] = useState("");
@@ -188,6 +191,9 @@ export default function HabillementPage() {
   const [requestHistory, setRequestHistory] = useState<RequestHistory[]>([]);
 
   const [returns, setReturns] = useState<ClothingReturn[]>([]);
+  const [historicalReturns, setHistoricalReturns] = useState<ClothingReturn[]>([]);
+  const [selectedHistoricalReturn, setSelectedHistoricalReturn] = useState<ClothingReturn | null>(null);
+  const [historicalReturnItems, setHistoricalReturnItems] = useState<ClothingReturnItem[]>([]);
   const [selectedReturn, setSelectedReturn] = useState<ClothingReturn | null>(null);
   const [returnItems, setReturnItems] = useState<ClothingReturnItem[]>([]);
   const [returnComment, setReturnComment] = useState("");
@@ -233,6 +239,7 @@ export default function HabillementPage() {
         loadCatalogue(),
         loadRequests(),
         loadReturns(),
+        loadHistoricalReturns(),
       ]);
     } catch (error) {
       console.error("Initialisation habillement :", error);
@@ -342,6 +349,37 @@ export default function HabillementPage() {
     setReturns((data ?? []) as ClothingReturn[]);
   }
 
+  async function loadHistoricalReturns() {
+    const { data, error } = await supabase
+      .from("clothing_returns")
+      .select("*")
+      .eq("status", "terminee")
+      .order("completed_at", { ascending: false });
+
+    if (error) throw error;
+    setHistoricalReturns((data ?? []) as ClothingReturn[]);
+  }
+
+  async function openHistoricalReturn(clothingReturn: ClothingReturn) {
+    setSelectedHistoricalReturn(clothingReturn);
+    setHistoricalReturnItems([]);
+    setErrorMessage("");
+
+    const { data, error } = await supabase
+      .from("clothing_return_items")
+      .select("*")
+      .eq("return_id", clothingReturn.id)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("Historique restitution :", error);
+      setErrorMessage("Impossible de charger le détail de cette restitution.");
+      return;
+    }
+
+    setHistoricalReturnItems((data ?? []) as ClothingReturnItem[]);
+  }
+
   async function openReturn(clothingReturn: ClothingReturn) {
     setSelectedReturn(clothingReturn);
     setReturnItems([]);
@@ -424,6 +462,7 @@ export default function HabillementPage() {
 
       await Promise.all([
         loadReturns(),
+        loadHistoricalReturns(),
         loadPersonnel(),
       ]);
     } catch (error) {
@@ -855,6 +894,17 @@ export default function HabillementPage() {
     );
   }, [historicalRequests, historyAgentFilter]);
 
+  const filteredHistoricalReturns = useMemo(() => {
+    const query = returnHistorySearch.trim().toLowerCase();
+    if (!query) return historicalReturns;
+
+    return historicalReturns.filter((clothingReturn) =>
+      `${clothingReturn.first_name ?? ""} ${clothingReturn.last_name ?? ""} ${clothingReturn.grade ?? ""}`
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [historicalReturns, returnHistorySearch]);
+
   const requestCounts = useMemo(() => {
     const counts: Record<RequestStatus, number> = {
       en_attente: 0,
@@ -969,9 +1019,9 @@ export default function HabillementPage() {
                 {returns.length}
               </span>
             )}
-            {value === "historique" && historicalRequests.length > 0 && (
+            {value === "historique" && historicalRequests.length + historicalReturns.length > 0 && (
               <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-xs">
-                {historicalRequests.length}
+                {historicalRequests.length + historicalReturns.length}
               </span>
             )}
           </button>
@@ -1270,117 +1320,364 @@ export default function HabillementPage() {
 
       {tab === "historique" && (
         <section className="mt-6">
-          <div className="mb-5 rounded-3xl border border-border bg-card p-5 sm:p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="text-xl font-black">📚 Historique des demandes</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Filtrez les demandes terminées par agent.
-                </p>
-              </div>
+          <div className="rounded-3xl border border-border bg-card p-5 sm:p-6">
+            <div>
+              <h2 className="text-xl font-black">📚 Historique habillement</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Retrouvez les demandes clôturées et les restitutions terminées.
+              </p>
+            </div>
 
-              <div className="w-full sm:max-w-sm">
-                <label className="mb-2 block text-xs font-black uppercase tracking-wider text-muted-foreground">
-                  Agent
-                </label>
-                <select
-                  value={historyAgentFilter}
-                  onChange={(event) => setHistoryAgentFilter(event.target.value)}
-                  className="min-h-12 w-full rounded-xl border border-border bg-background px-4"
-                >
-                  <option value="">Tous les agents</option>
-                  {profiles
-                    .slice()
-                    .sort((a, b) =>
-                      fullName(a).localeCompare(fullName(b), "fr")
-                    )
-                    .map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {fullName(profile)}
-                        {profile.grade ? ` — ${profile.grade}` : ""}
-                      </option>
-                    ))}
-                </select>
-              </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setHistoryTab("demandes")}
+                className={`rounded-2xl border px-4 py-3 text-left font-black transition ${
+                  historyTab === "demandes"
+                    ? "border-red-600 bg-red-600 text-white"
+                    : "border-border bg-background hover:border-red-500"
+                }`}
+              >
+                Demandes de changement
+                <span className="ml-2 rounded-full bg-black/10 px-2 py-0.5 text-xs">
+                  {historicalRequests.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setHistoryTab("restitutions")}
+                className={`rounded-2xl border px-4 py-3 text-left font-black transition ${
+                  historyTab === "restitutions"
+                    ? "border-red-600 bg-red-600 text-white"
+                    : "border-border bg-background hover:border-red-500"
+                }`}
+              >
+                Restitutions
+                <span className="ml-2 rounded-full bg-black/10 px-2 py-0.5 text-xs">
+                  {historicalReturns.length}
+                </span>
+              </button>
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            {(["traitee", "refusee"] as RequestStatus[]).map((status) => (
-              <div
-                key={status}
-                className="rounded-2xl border border-border bg-card p-4"
-              >
-                <p className="text-sm font-bold text-muted-foreground">
-                  {STATUS_ICONS[status]} {STATUS_LABELS[status]}
-                </p>
-                <p className="mt-2 text-2xl font-black">
-                  {requestCounts[status]}
-                </p>
-              </div>
-            ))}
-          </div>
+          {historyTab === "demandes" && (
+            <>
+              <div className="mt-5 rounded-3xl border border-border bg-card p-5 sm:p-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-black">Historique des demandes</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Filtrez les demandes terminées par agent.
+                    </p>
+                  </div>
 
-          <div className="mt-5 overflow-hidden rounded-3xl border border-border bg-card">
-            {filteredHistoricalRequests.length === 0 ? (
-              <div className="p-10 text-center">
-                <div className="text-3xl">📚</div>
-                <p className="mt-2 font-black">
-                  {historyAgentFilter
-                    ? "Aucune demande terminée pour cet agent"
-                    : "Historique vide"}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Les demandes traitées ou refusées apparaîtront ici.
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {filteredHistoricalRequests.map((request) => {
-                  const profile = profiles.find(
-                    (candidate) => candidate.id === request.profile_id
-                  );
-                  const item = relationOne(request.clothing_items);
-
-                  return (
-                    <button
-                      key={request.id}
-                      type="button"
-                      onClick={() => void openRequest(request)}
-                      className="flex w-full flex-col gap-3 p-5 text-left transition hover:bg-muted/30 sm:flex-row sm:items-center"
+                  <div className="w-full sm:max-w-sm">
+                    <label className="mb-2 block text-xs font-black uppercase tracking-wider text-muted-foreground">
+                      Agent
+                    </label>
+                    <select
+                      value={historyAgentFilter}
+                      onChange={(event) => setHistoryAgentFilter(event.target.value)}
+                      className="min-h-12 w-full rounded-xl border border-border bg-background px-4"
                     >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-black">
-                          {fullName(profile)}
-                        </p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {item?.name ?? "Vêtement"} ·{" "}
-                          {request.reason.replaceAll("_", " ")}
-                        </p>
-                        {request.resolution_comment && (
-                          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
-                            💬 {request.resolution_comment}
-                          </p>
-                        )}
-                      </div>
-
-                      <span className="rounded-full bg-muted px-3 py-1.5 text-xs font-black">
-                        {STATUS_ICONS[request.status]}{" "}
-                        {STATUS_LABELS[request.status]}
-                      </span>
-
-                      <span className="text-sm text-muted-foreground">
-                        {formatDateTime(request.handled_at ?? request.updated_at)}
-                      </span>
-
-                      <span className="text-xl">›</span>
-                    </button>
-                  );
-                })}
+                      <option value="">Tous les agents</option>
+                      {profiles
+                        .slice()
+                        .sort((a, b) =>
+                          fullName(a).localeCompare(fullName(b), "fr")
+                        )
+                        .map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            {fullName(profile)}
+                            {profile.grade ? ` — ${profile.grade}` : ""}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                {(["traitee", "refusee"] as RequestStatus[]).map((status) => (
+                  <div
+                    key={status}
+                    className="rounded-2xl border border-border bg-card p-4"
+                  >
+                    <p className="text-sm font-bold text-muted-foreground">
+                      {STATUS_ICONS[status]} {STATUS_LABELS[status]}
+                    </p>
+                    <p className="mt-2 text-2xl font-black">
+                      {requestCounts[status]}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 overflow-hidden rounded-3xl border border-border bg-card">
+                {filteredHistoricalRequests.length === 0 ? (
+                  <div className="p-10 text-center">
+                    <div className="text-3xl">📚</div>
+                    <p className="mt-2 font-black">
+                      {historyAgentFilter
+                        ? "Aucune demande terminée pour cet agent"
+                        : "Historique vide"}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Les demandes traitées ou refusées apparaîtront ici.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {filteredHistoricalRequests.map((request) => {
+                      const profile = profiles.find(
+                        (candidate) => candidate.id === request.profile_id
+                      );
+                      const item = relationOne(request.clothing_items);
+
+                      return (
+                        <button
+                          key={request.id}
+                          type="button"
+                          onClick={() => void openRequest(request)}
+                          className="flex w-full flex-col gap-3 p-5 text-left transition hover:bg-muted/30 sm:flex-row sm:items-center"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="font-black">
+                              {fullName(profile)}
+                            </p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {item?.name ?? "Vêtement"} ·{" "}
+                              {request.reason.replaceAll("_", " ")}
+                            </p>
+                            {request.resolution_comment && (
+                              <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+                                💬 {request.resolution_comment}
+                              </p>
+                            )}
+                          </div>
+
+                          <span className="rounded-full bg-muted px-3 py-1.5 text-xs font-black">
+                            {STATUS_ICONS[request.status]}{" "}
+                            {STATUS_LABELS[request.status]}
+                          </span>
+
+                          <span className="text-sm text-muted-foreground">
+                            {formatDateTime(request.handled_at ?? request.updated_at)}
+                          </span>
+
+                          <span className="text-xl">›</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {historyTab === "restitutions" && (
+            <>
+              <div className="mt-5 rounded-3xl border border-border bg-card p-5 sm:p-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-black">Historique des restitutions</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Les dossiers restent consultables après la suppression du compte.
+                    </p>
+                  </div>
+
+                  <div className="w-full sm:max-w-sm">
+                    <label className="mb-2 block text-xs font-black uppercase tracking-wider text-muted-foreground">
+                      Rechercher
+                    </label>
+                    <input
+                      value={returnHistorySearch}
+                      onChange={(event) => setReturnHistorySearch(event.target.value)}
+                      placeholder="Nom, prénom ou grade..."
+                      className="min-h-12 w-full rounded-xl border border-border bg-background px-4 outline-none focus:border-red-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 overflow-hidden rounded-3xl border border-border bg-card">
+                {filteredHistoricalReturns.length === 0 ? (
+                  <div className="p-10 text-center">
+                    <div className="text-3xl">📦</div>
+                    <p className="mt-2 font-black">
+                      {returnHistorySearch
+                        ? "Aucune restitution correspondante"
+                        : "Aucune restitution terminée"}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Les restitutions clôturées apparaîtront ici.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {filteredHistoricalReturns.map((clothingReturn) => (
+                      <button
+                        key={clothingReturn.id}
+                        type="button"
+                        onClick={() => void openHistoricalReturn(clothingReturn)}
+                        className="flex w-full flex-col gap-3 p-5 text-left transition hover:bg-muted/30 sm:flex-row sm:items-center"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black">
+                            {`${clothingReturn.first_name ?? ""} ${clothingReturn.last_name ?? ""}`.trim() ||
+                              "Ancien utilisateur"}
+                          </p>
+                          {clothingReturn.grade && (
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {clothingReturn.grade}
+                            </p>
+                          )}
+                        </div>
+
+                        <span className="rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-black text-emerald-600">
+                          Terminée
+                        </span>
+
+                        <span className="text-sm text-muted-foreground">
+                          {clothingReturn.completed_at
+                            ? formatDateTime(clothingReturn.completed_at)
+                            : formatDateTime(clothingReturn.updated_at)}
+                        </span>
+
+                        <span className="text-xl">›</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </section>
+      )}
+
+      {selectedHistoricalReturn && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 sm:p-8">
+          <div className="w-full max-w-4xl rounded-3xl border border-border bg-card p-5 shadow-2xl sm:p-7">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-red-600">
+                  Historique restitution
+                </p>
+                <h2 className="mt-2 text-2xl font-black">
+                  {`${selectedHistoricalReturn.first_name ?? ""} ${selectedHistoricalReturn.last_name ?? ""}`.trim() ||
+                    "Ancien utilisateur"}
+                </h2>
+                {selectedHistoricalReturn.grade && (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {selectedHistoricalReturn.grade}
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedHistoricalReturn(null);
+                  setHistoricalReturnItems([]);
+                }}
+                className="rounded-xl border border-border px-4 py-2 font-black"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-border p-4">
+                <p className="text-xs font-bold uppercase text-muted-foreground">
+                  Départ lancé
+                </p>
+                <p className="mt-1 font-black">
+                  {formatDateTime(selectedHistoricalReturn.started_at)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-border p-4">
+                <p className="text-xs font-bold uppercase text-muted-foreground">
+                  Restitution clôturée
+                </p>
+                <p className="mt-1 font-black">
+                  {selectedHistoricalReturn.completed_at
+                    ? formatDateTime(selectedHistoricalReturn.completed_at)
+                    : "—"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <h3 className="font-black">Vêtements de la restitution</h3>
+
+              {historicalReturnItems.length === 0 ? (
+                <div className="mt-3 rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                  Aucun vêtement enregistré dans cette restitution.
+                </div>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {historicalReturnItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-2xl border border-border p-4"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black">{item.clothing_name}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Taille : <strong>{item.size || "—"}</strong> · Quantité :{" "}
+                            <strong>{item.quantity}</strong>
+                          </p>
+                          {item.comment && (
+                            <p className="mt-2 text-sm text-muted-foreground">
+                              Commentaire : {item.comment}
+                            </p>
+                          )}
+                          {item.validated_at && (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              Validé le {formatDateTime(item.validated_at)}
+                            </p>
+                          )}
+                        </div>
+
+                        <span
+                          className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${
+                            item.status === "rendu"
+                              ? "bg-emerald-500/10 text-emerald-600"
+                              : item.status === "non_rendu"
+                                ? "bg-red-500/10 text-red-600"
+                                : "bg-amber-500/10 text-amber-600"
+                          }`}
+                        >
+                          {item.status === "rendu"
+                            ? "Rendu"
+                            : item.status === "non_rendu"
+                              ? "Non rendu"
+                              : "À restituer"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedHistoricalReturn(null);
+                  setHistoricalReturnItems([]);
+                }}
+                className="rounded-xl border border-border px-5 py-3 font-black"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {selectedReturn && (
