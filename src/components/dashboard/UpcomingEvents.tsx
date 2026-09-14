@@ -17,54 +17,76 @@ export default function UpcomingEvents({
 }: UpcomingEventsProps) {
   return (
     <section className="rounded-3xl bg-white p-5 shadow-sm dark:bg-slate-900 sm:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <h2 className="text-xl font-extrabold">
           Prochains événements
         </h2>
 
         <Link
-          href="/dashboard/planning"
-          className="text-sm font-bold text-blue-600"
+          href="/dashboard/evenements"
+          className="shrink-0 text-sm font-bold text-blue-600 transition hover:text-blue-700"
         >
           Voir tout
         </Link>
       </div>
 
-      <div className="mt-4 divide-y divide-slate-200 dark:divide-slate-800">
-        {events.map((event) => (
-          <Link
-            key={`${event.day}-${event.month}-${event.title}`}
-            href="/dashboard/planning"
-            className="flex items-center gap-4 py-4 first:pt-2 last:pb-1"
-          >
-            <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800">
-              <span className="text-xl font-black text-red-600">
-                {event.day}
-              </span>
+      {events.length === 0 ? (
+        <div className="mt-5 flex min-h-32 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 px-5 py-6 text-center dark:border-slate-800">
+          <div className="text-2xl">📅</div>
 
-              <span className="text-xs font-bold">
-                {event.month}
-              </span>
-            </div>
+          <p className="mt-2 font-extrabold">
+            Aucun événement à venir
+          </p>
 
-            <div className="min-w-0 flex-1">
-              <p className="font-extrabold">{event.title}</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Aucun événement n&apos;est prévu pour le moment.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-4 divide-y divide-slate-200 dark:divide-slate-800">
+          {events.map((event) => (
+            <Link
+              key={`${event.day}-${event.month}-${event.title}`}
+              href="/dashboard/evenements"
+              className="flex items-center gap-4 py-4 transition first:pt-2 last:pb-1 hover:opacity-80"
+            >
+              <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800">
+                <span className="text-xl font-black text-red-600">
+                  {event.day}
+                </span>
 
-              <p className="mt-1 truncate text-sm text-slate-500">
-                📍 {event.location}
-              </p>
-            </div>
+                <span className="text-xs font-bold">
+                  {event.month}
+                </span>
+              </div>
 
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-slate-500">
-                {event.time}
-              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-extrabold">
+                  {event.title}
+                </p>
 
-              <span className="text-2xl text-slate-400">›</span>
-            </div>
-          </Link>
-        ))}
-      </div>
+                {event.location && (
+                  <p className="mt-1 truncate text-sm text-slate-500">
+                    📍 {event.location}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex shrink-0 items-center gap-3">
+                {event.time && (
+                  <span className="text-sm text-slate-500">
+                    {event.time}
+                  </span>
+                )}
+
+                <span className="text-2xl text-slate-400">
+                  ›
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

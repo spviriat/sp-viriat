@@ -15,6 +15,13 @@ type BusinessRole = {
   label: string;
 };
 
+type PermissionDefinition = {
+  code: string;
+  label: string;
+  description: string | null;
+  sort_order: number;
+};
+
 type UserProfile = {
   id: string;
   first_name: string;
@@ -177,6 +184,16 @@ export default function AdminPage() {
 
   const [businessRoles, setBusinessRoles] =
     useState<BusinessRole[]>([]);
+
+  const [
+    permissionDefinitions,
+    setPermissionDefinitions,
+  ] = useState<PermissionDefinition[]>([]);
+
+  const [
+    selectedPermissionCodes,
+    setSelectedPermissionCodes,
+  ] = useState<string[]>([]);
 
   const [selectedUser, setSelectedUser] =
     useState<UserProfile | null>(null);
@@ -448,6 +465,7 @@ export default function AdminPage() {
         profilesResult,
         businessRolesResult,
         assignmentsResult,
+        permissionDefinitionsResult,
       ] = await Promise.all([
         supabase
           .from("profiles")
@@ -490,6 +508,20 @@ export default function AdminPage() {
           )
           .select(
             "profile_id, business_role_id"
+          ),
+
+        supabase
+          .from(
+            "permission_definitions"
+          )
+          .select(
+            "code, label, description, sort_order"
+          )
+          .order(
+            "sort_order",
+            {
+              ascending: true,
+            }
           ),
       ]);
 
@@ -543,6 +575,28 @@ export default function AdminPage() {
 
         return;
       }
+
+      if (
+        permissionDefinitionsResult.error
+      ) {
+        console.error(
+          "Erreur lors de la récupération des permissions :",
+          permissionDefinitionsResult.error
+        );
+
+        setErrorMessage(
+          "Impossible de récupérer les permissions disponibles."
+        );
+
+        setIsLoading(false);
+
+        return;
+      }
+
+      setPermissionDefinitions(
+        (permissionDefinitionsResult.data ??
+          []) as PermissionDefinition[]
+      );
 
       const loadedBusinessRoles =
         sortBusinessRoles(
@@ -726,6 +780,8 @@ export default function AdminPage() {
         )
       );
 
+      setSelectedPermissionCodes([]);
+
       try {
         const {
           data: { session },
@@ -742,6 +798,39 @@ export default function AdminPage() {
           );
 
           return;
+        }
+
+        if (currentUserIsAdmin) {
+          const {
+            data: permissionAssignments,
+            error: permissionAssignmentsError,
+          } = await supabase
+            .from("user_permissions")
+            .select("permission_code")
+            .eq("profile_id", user.id);
+
+          if (permissionAssignmentsError) {
+            console.error(
+              "Erreur lors de la récupération des permissions de l'utilisateur :",
+              permissionAssignmentsError
+            );
+
+            setErrorMessage(
+              "Impossible de récupérer les permissions supplémentaires de l'utilisateur."
+            );
+          } else {
+            setSelectedPermissionCodes(
+              (permissionAssignments ?? [])
+                .map(
+                  (assignment) =>
+                    assignment.permission_code
+                )
+                .filter(
+                  (code): code is string =>
+                    typeof code === "string"
+                )
+            );
+          }
         }
 
         const response =
@@ -825,6 +914,10 @@ export default function AdminPage() {
         []
       );
 
+      setSelectedPermissionCodes(
+        []
+      );
+
       setSelectedUserEmail(
         ""
       );
@@ -904,6 +997,30 @@ const toggleBusinessRole = (
     }
   );
 };
+
+  const togglePermission =
+    (permissionCode: string) => {
+      if (!currentUserIsAdmin) {
+        return;
+      }
+
+      setSelectedPermissionCodes(
+        (currentCodes) =>
+          currentCodes.includes(
+            permissionCode
+          )
+            ? currentCodes.filter(
+                (code) =>
+                  code !==
+                  permissionCode
+              )
+            : [
+                ...currentCodes,
+                permissionCode,
+              ]
+      );
+    };
+
   const handleSaveUser = async () => {
     if (!selectedUser) {
       return;
@@ -1112,6 +1229,84 @@ const toggleBusinessRole = (
 
       /*
        * ===============================================
+       * Permissions supplémentaires
+       * ===============================================
+       *
+       * Les rôles métier continuent de fonctionner
+       * normalement. Cette partie ne gère que les
+       * permissions individuelles ajoutées manuellement.
+       */
+
+      if (currentUserIsAdmin) {
+        const {
+          error: deletePermissionsError,
+        } = await supabase
+          .from("user_permissions")
+          .delete()
+          .eq(
+            "profile_id",
+            selectedUser.id
+          );
+
+        if (deletePermissionsError) {
+          console.error(
+            "Erreur suppression anciennes permissions :",
+            deletePermissionsError
+          );
+
+          setErrorMessage(
+            "Les informations de l'utilisateur ont été enregistrées, mais ses permissions supplémentaires n'ont pas pu être mises à jour."
+          );
+
+          return;
+        }
+
+        if (
+          selectedPermissionCodes.length >
+          0
+        ) {
+          if (!currentUserId) {
+            setErrorMessage(
+              "Impossible d'identifier l'administrateur qui attribue les permissions."
+            );
+
+            return;
+          }
+
+          const {
+            error: insertPermissionsError,
+          } = await supabase
+            .from("user_permissions")
+            .insert(
+              selectedPermissionCodes.map(
+                (permissionCode) => ({
+                  profile_id:
+                    selectedUser.id,
+                  permission_code:
+                    permissionCode,
+                  granted_by:
+                    currentUserId,
+                })
+              )
+            );
+
+          if (insertPermissionsError) {
+            console.error(
+              "Erreur enregistrement permissions :",
+              insertPermissionsError
+            );
+
+            setErrorMessage(
+              "Les informations de l'utilisateur ont été enregistrées, mais ses permissions supplémentaires n'ont pas pu être attribuées."
+            );
+
+            return;
+          }
+        }
+      }
+
+      /*
+       * ===============================================
        * Reconstruction de l'utilisateur enregistré
        * ===============================================
        */
@@ -1168,6 +1363,10 @@ const toggleBusinessRole = (
       setSelectedUser(null);
 
       setSelectedBusinessRoleIds(
+        []
+      );
+
+      setSelectedPermissionCodes(
         []
       );
 
@@ -2713,6 +2912,92 @@ const toggleBusinessRole = (
                 )}
               </div>
             </div>
+
+            {/* =============================================
+                PERMISSIONS SUPPLÉMENTAIRES
+            ============================================= */}
+
+            {currentUserIsAdmin && (
+              <div className="mt-8 border-t border-slate-200 pt-8 dark:border-slate-800">
+                <h3 className="text-lg font-black">
+                  Permissions supplémentaires
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Ces droits sont attribués individuellement et
+                  s&apos;ajoutent aux droits déjà accordés par les
+                  rôles métier.
+                </p>
+
+                {permissionDefinitions.length === 0 ? (
+                  <p className="mt-5 rounded-2xl border border-dashed border-slate-300 px-4 py-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    Aucune permission supplémentaire n&apos;est
+                    disponible.
+                  </p>
+                ) : (
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    {permissionDefinitions.map(
+                      (permission) => {
+                        const isSelected =
+                          selectedPermissionCodes.includes(
+                            permission.code
+                          );
+
+                        return (
+                          <label
+                            key={
+                              permission.code
+                            }
+                            className={
+                              selectedUserIsProtectedAdmin
+                                ? "flex cursor-not-allowed items-start gap-3 rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-4 text-slate-500 opacity-70 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-400"
+                                : isSelected
+                                  ? "flex cursor-pointer items-start gap-3 rounded-2xl border-2 border-red-600 bg-red-50 px-4 py-4 text-red-700 transition dark:bg-red-950/30 dark:text-red-300"
+                                  : "flex cursor-pointer items-start gap-3 rounded-2xl border-2 border-slate-200 px-4 py-4 text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
+                            }
+                          >
+                            <input
+                              type="checkbox"
+                              checked={
+                                isSelected
+                              }
+                              onChange={() =>
+                                togglePermission(
+                                  permission.code
+                                )
+                              }
+                              disabled={
+                                isSaving ||
+                                isDeleting ||
+                                isUpdatingEmail ||
+                                !canEditSelectedUser
+                              }
+                              className="mt-0.5 h-5 w-5 shrink-0 accent-red-600 disabled:cursor-not-allowed"
+                            />
+
+                            <span className="min-w-0">
+                              <span className="block font-bold">
+                                {
+                                  permission.label
+                                }
+                              </span>
+
+                              {permission.description && (
+                                <span className="mt-1 block text-sm leading-5 opacity-75">
+                                  {
+                                    permission.description
+                                  }
+                                </span>
+                              )}
+                            </span>
+                          </label>
+                        );
+                      }
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* =============================================
                 ARCHIVAGE

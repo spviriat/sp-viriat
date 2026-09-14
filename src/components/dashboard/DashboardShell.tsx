@@ -24,6 +24,7 @@ import {
   Newspaper,
   Package,
   Settings,
+  Shirt,
   Tags,
   TriangleAlert,
   Truck,
@@ -439,6 +440,11 @@ export default function DashboardShell({
   const canSeePharmacyMenu =
     isAdmin || isPharmacyManager;
 
+  const isClothingManager =
+    businessRoleCodes.includes("responsable_habillement");
+  const canSeeClothingManagement =
+    isAdmin || isClothingManager;
+
   const canCreateIntervention =
     isAdmin ||
     isChefCentre ||
@@ -510,6 +516,16 @@ export default function DashboardShell({
                 <SidebarItem href="/dashboard" icon={House} label="Accueil" open={isSidebarOpen} active={isActive("/dashboard")} />
                 <SidebarItem href="/dashboard/materiel" icon={Package} label="Mon matériel" open={isSidebarOpen} active={isActive("/dashboard/materiel")} />
                 <SidebarItem href="/dashboard/sac" icon={Backpack} label="Mon sac" open={isSidebarOpen} active={isActive("/dashboard/sac")} />
+
+                {canSeeClothingManagement && (
+                  <SidebarItem
+                    href="/dashboard/habillement"
+                    icon={Shirt}
+                    label="Gestion habillement"
+                    open={isSidebarOpen}
+                    active={isActive("/dashboard/habillement")}
+                  />
+                )}
                 <SidebarItem href="/dashboard/verifications" icon={ClipboardCheck} label="Vérifications" open={isSidebarOpen} active={isActive("/dashboard/verifications")} />
                 <SidebarItem href="/dashboard/disponibilites" icon={CalendarDays} label="Disponibilités" open={isSidebarOpen} active={pathname === "/dashboard/disponibilites"} />
 
@@ -679,6 +695,15 @@ export default function DashboardShell({
                   </p>
                   <div className="grid gap-2">
                     <MobileMoreLink href="/dashboard/sac" icon={Backpack} label="Mon sac" onNavigate={() => setIsMobileMoreOpen(false)} />
+
+                    {canSeeClothingManagement && (
+                      <MobileMoreLink
+                        href="/dashboard/habillement"
+                        icon={Shirt}
+                        label="Gestion habillement"
+                        onNavigate={() => setIsMobileMoreOpen(false)}
+                      />
+                    )}
                     <MobileMoreLink href="/dashboard/verifications" icon={ClipboardCheck} label="Vérifications" onNavigate={() => setIsMobileMoreOpen(false)} />
                     <MobileMoreLink href="/dashboard/disponibilites" icon={CalendarDays} label="Disponibilités" onNavigate={() => setIsMobileMoreOpen(false)} />
 

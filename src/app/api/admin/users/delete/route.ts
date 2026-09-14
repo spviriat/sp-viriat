@@ -423,7 +423,272 @@ export async function POST(request: Request) {
 
   /*
    * =====================================================
-   * 10. Suppression du compte Auth
+   * 10. Vérification de la dotation habillement
+   * =====================================================
+   *
+   * Si l'utilisateur possède encore des vêtements :
+   * - on bloque immédiatement son accès ;
+   * - on crée son dossier de restitution ;
+   * - on conserve son profil et son compte Auth ;
+   * - la suppression définitive sera déclenchée après
+   *   validation de la dernière restitution.
+   */
+
+  const {
+    count: clothingAssignmentCount,
+    error: clothingAssignmentError,
+  } = await supabaseAdmin
+    .from("clothing_assignments")
+    .select("id", {
+      count: "exact",
+      head: true,
+    })
+    .eq("profile_id", userId)
+    .gt("quantity", 0);
+
+  if (clothingAssignmentError) {
+    console.error(
+      "Impossible de vérifier la dotation habillement :",
+      clothingAssignmentError
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          "Impossible de vérifier la dotation habillement de l'utilisateur.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+
+  const hasClothing =
+    (clothingAssignmentCount ?? 0) > 0;
+
+  /*
+   * =====================================================
+   * 11. Départ avec restitution habillement
+   * =====================================================
+   */
+
+  if (hasClothing) {
+    /*
+     * On archive d'abord le profil.
+     * Le DashboardShell / les contrôles d'accès existants
+     * doivent refuser l'accès aux profils archivés.
+     */
+
+    const {
+      error: archiveError,
+    } = await supabaseAdmin
+      .from("profiles")
+      .update({
+        status: "archived",
+      })
+      .eq("id", userId);
+
+    if (archiveError) {
+      console.error(
+        "Impossible d'archiver le profil :",
+        archiveError
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Impossible de bloquer l'accès de l'utilisateur.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    /*
+     * Blocage Auth supplémentaire.
+     *
+     * ban_duration = "876000h" correspond à une durée
+     * volontairement très longue. Le compte n'est pas
+     * supprimé : il reste disponible jusqu'à la fin de
+     * la restitution.
+     */
+
+    const {
+      error: authBlockError,
+    } =
+      await supabaseAdmin.auth.admin.updateUserById(
+        userId,
+        {
+          ban_duration: "876000h",
+        }
+      );
+
+    if (authBlockError) {
+      console.error(
+        "Impossible de bloquer le compte Auth :",
+        authBlockError
+      );
+
+      /*
+       * On tente de revenir à l'état précédent afin de ne
+       * pas laisser un profil archivé avec un compte Auth
+       * encore utilisable.
+       */
+      await supabaseAdmin
+        .from("profiles")
+        .update({
+          status:
+            targetProfile.status ?? "active",
+        })
+        .eq("id", userId);
+
+      return NextResponse.json(
+        {
+          error:
+            "Le départ n'a pas pu être lancé car le compte d'authentification n'a pas pu être bloqué.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    /*
+     * Création du dossier + copie de la dotation actuelle.
+     * La fonction SQL est idempotente : si un dossier
+     * existe déjà, elle renvoie simplement son identifiant.
+     */
+
+    const {
+      data: returnId,
+      error: returnError,
+    } = await supabaseAdmin.rpc(
+      "create_clothing_return",
+      {
+        target_profile_id: userId,
+      }
+    );
+
+    if (returnError) {
+      console.error(
+        "Impossible de créer la restitution habillement :",
+        returnError
+      );
+
+      /*
+       * On débloque le compte et on restaure le statut
+       * puisqu'on n'a pas réussi à créer le dossier.
+       */
+      await supabaseAdmin.auth.admin.updateUserById(
+        userId,
+        {
+          ban_duration: "none",
+        }
+      );
+
+      await supabaseAdmin
+        .from("profiles")
+        .update({
+          status:
+            targetProfile.status ?? "active",
+        })
+        .eq("id", userId);
+
+      return NextResponse.json(
+        {
+          error:
+            "Impossible de créer le dossier de restitution habillement.",
+          supabaseError: {
+            message: returnError.message ?? null,
+            details: returnError.details ?? null,
+            hint: returnError.hint ?? null,
+            code: returnError.code ?? null,
+          },
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    /*
+     * Journal d'audit du départ.
+     */
+
+    const { error: auditError } =
+      await supabaseAdmin
+        .from("audit_logs")
+        .insert({
+          actor_id: currentUser.id,
+          actor_name: actorName,
+          actor_email:
+            currentUser.email ?? null,
+
+          action:
+            "START_USER_DEPARTURE",
+
+          target_profile_id:
+            userId,
+
+          target_name:
+            targetName,
+
+          target_email:
+            targetEmail,
+
+          module: "users",
+
+          details: {
+            previous_access_role:
+              targetProfile.access_role,
+
+            previous_status:
+              targetProfile.status,
+
+            business_role_ids:
+              businessRoleIds,
+
+            actor_access_role:
+              currentProfile.access_role,
+
+            actor_is_admin:
+              isAdmin,
+
+            clothing_assignment_count:
+              clothingAssignmentCount ?? 0,
+
+            clothing_return_id:
+              returnId,
+          },
+        });
+
+    if (auditError) {
+      console.error(
+        "Départ lancé, mais audit impossible :",
+        auditError
+      );
+    }
+
+    return NextResponse.json({
+      message:
+        "Accès utilisateur bloqué. La suppression définitive sera effectuée automatiquement après validation de la restitution habillement.",
+
+      departurePending: true,
+
+      clothingReturnId:
+        returnId,
+
+      clothingAssignmentCount:
+        clothingAssignmentCount ?? 0,
+
+      userId,
+    });
+  }
+
+  /*
+   * =====================================================
+   * 12. Aucun vêtement : suppression immédiate
    * =====================================================
    */
 
@@ -450,40 +715,57 @@ export async function POST(request: Request) {
   }
 
   /*
-   * =====================================================
-   * 11. Suppression du profil
-   * =====================================================
-   *
-   * profile_business_roles possède ON DELETE CASCADE.
+   * Selon la configuration Supabase, la suppression Auth
+   * peut déjà avoir supprimé le profil via cascade.
+   * On tente donc uniquement de supprimer un profil encore
+   * présent.
    */
 
   const {
-    error: profileDeleteError,
+    data: remainingProfile,
+    error: remainingProfileReadError,
   } = await supabaseAdmin
     .from("profiles")
-    .delete()
-    .eq("id", userId);
+    .select("id")
+    .eq("id", userId)
+    .maybeSingle();
 
-  if (profileDeleteError) {
+  if (remainingProfileReadError) {
     console.error(
-      "Erreur suppression profil :",
-      profileDeleteError
+      "Impossible de vérifier le profil après suppression Auth :",
+      remainingProfileReadError
     );
+  }
 
-    return NextResponse.json(
-      {
-        error:
-          "Le compte Auth a été supprimé, mais le profil n'a pas pu être supprimé.",
-      },
-      {
-        status: 500,
-      }
-    );
+  if (remainingProfile) {
+    const {
+      error: profileDeleteError,
+    } = await supabaseAdmin
+      .from("profiles")
+      .delete()
+      .eq("id", userId);
+
+    if (profileDeleteError) {
+      console.error(
+        "Erreur suppression profil :",
+        profileDeleteError
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Le compte Auth a été supprimé, mais le profil n'a pas pu être supprimé.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
   }
 
   /*
    * =====================================================
-   * 12. Journal d'audit
+   * 13. Journal d'audit
    * =====================================================
    */
 
@@ -524,6 +806,8 @@ export async function POST(request: Request) {
 
           actor_is_admin:
             isAdmin,
+
+          clothing_assignment_count: 0,
         },
       });
 
@@ -536,13 +820,15 @@ export async function POST(request: Request) {
 
   /*
    * =====================================================
-   * 13. Réponse
+   * 14. Réponse
    * =====================================================
    */
 
   return NextResponse.json({
     message:
       "Utilisateur supprimé définitivement.",
+
+    departurePending: false,
 
     deletedUserId:
       userId,

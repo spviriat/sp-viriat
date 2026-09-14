@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import WelcomeSection from "@/components/dashboard/WelcomeSection";
@@ -7,6 +8,7 @@ import QuickAccess from "@/components/dashboard/QuickAccess";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
 import NextDuty from "@/components/dashboard/NextDuty";
 import { useDashboardShell } from "@/components/dashboard/DashboardShell";
+import { supabase } from "@/lib/supabase";
 
 const quickAccessItems = [
   {
@@ -52,22 +54,54 @@ const quickAccessItems = [
   },
 ];
 
-const upcomingEvents = [
-  {
-    day: "15",
-    month: "JUIN",
-    title: "Manœuvre départementale",
-    location: "Caserne de Viriat",
-    time: "08:00",
-  },
-  {
-    day: "14",
-    month: "JUIL.",
-    title: "Cérémonie du 14 juillet",
-    location: "Place de la Mairie",
-    time: "10:30",
-  },
+type DashboardEvent = {
+  id: string;
+  title: string;
+  event_date: string;
+  end_date: string | null;
+  event_time: string | null;
+  location: string | null;
+};
+
+type UpcomingEventItem = {
+  day: string;
+  month: string;
+  title: string;
+  location: string;
+  time: string;
+};
+
+const MONTHS = [
+  "JANV.",
+  "FÉVR.",
+  "MARS",
+  "AVR.",
+  "MAI",
+  "JUIN",
+  "JUIL.",
+  "AOÛT",
+  "SEPT.",
+  "OCT.",
+  "NOV.",
+  "DÉC.",
 ];
+
+function formatDashboardEvent(
+  event: DashboardEvent
+): UpcomingEventItem {
+  const [year, month, day] =
+    event.event_date.split("-").map(Number);
+
+  return {
+    day: String(day).padStart(2, "0"),
+    month: MONTHS[month - 1] ?? "",
+    title: event.title,
+    location: event.location ?? "",
+    time: event.event_time
+      ? event.event_time.slice(0, 5)
+      : "",
+  };
+}
 
 export default function DashboardPage() {
   const {
@@ -77,6 +111,91 @@ export default function DashboardPage() {
     isLoggingOut,
     handleLogout,
   } = useDashboardShell();
+
+  const [upcomingEvents, setUpcomingEvents] = useState<
+    UpcomingEventItem[]
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadUpcomingEvents() {
+      try {
+        /*
+         * Date locale au format YYYY-MM-DD.
+         * On ne crée/supprime/modifie rien automatiquement.
+         * Elle sert uniquement à déterminer les événements
+         * encore en cours ou à venir.
+         */
+        const now = new Date();
+
+        const today = [
+          now.getFullYear(),
+          String(now.getMonth() + 1).padStart(2, "0"),
+          String(now.getDate()).padStart(2, "0"),
+        ].join("-");
+
+        /*
+         * Les RLS Supabase appliquent automatiquement
+         * les règles de visibilité :
+         *
+         * SP         -> SP + Les deux
+         * Amicaliste -> Amicale + Les deux
+         * SP + Ami.  -> toutes les catégories
+         */
+        const { data, error } = await supabase
+          .from("events")
+          .select(`
+            id,
+            title,
+            event_date,
+            end_date,
+            event_time,
+            location
+          `)
+          .or(
+            `event_date.gte.${today},end_date.gte.${today}`
+          )
+          .order("event_date", {
+            ascending: true,
+          })
+          .order("event_time", {
+            ascending: true,
+            nullsFirst: false,
+          })
+          .limit(3);
+
+        if (error) {
+          throw error;
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        const formatted = (
+          (data ?? []) as DashboardEvent[]
+        ).map(formatDashboardEvent);
+
+        setUpcomingEvents(formatted);
+      } catch (error) {
+        console.error(
+          "Erreur chargement prochains événements :",
+          error
+        );
+
+        if (!cancelled) {
+          setUpcomingEvents([]);
+        }
+      }
+    }
+
+    void loadUpcomingEvents();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -96,9 +215,11 @@ export default function DashboardPage() {
               <p className="font-bold text-red-600">
                 Rappel important
               </p>
+
               <h2 className="mt-1 text-lg font-extrabold">
                 Vérification des ARI
               </h2>
+
               <p className="mt-1 text-sm text-muted-foreground">
                 Pense à vérifier ton ARI avant la garde.
               </p>
@@ -110,6 +231,7 @@ export default function DashboardPage() {
           </Link>
 
           <QuickAccess items={quickAccessItems} />
+
           <UpcomingEvents events={upcomingEvents} />
         </div>
 
@@ -120,19 +242,24 @@ export default function DashboardPage() {
             href="/dashboard/notifications"
             className="flex items-center gap-4 rounded-3xl border border-amber-200 bg-amber-50 p-5 transition hover:shadow-md active:scale-[0.99] dark:border-amber-900 dark:bg-amber-950/30"
           >
-            <div className="text-3xl">⚠️</div>
+            <div className="text-3xl">
+              ⚠️
+            </div>
 
             <div className="min-w-0 flex-1">
               <p className="font-extrabold">
                 Pense-bête
               </p>
+
               <p className="mt-1 text-sm text-muted-foreground">
                 N&apos;oublie pas ta tenue de sport pour
                 l&apos;entraînement.
               </p>
             </div>
 
-            <span className="text-3xl">›</span>
+            <span className="text-3xl">
+              ›
+            </span>
           </Link>
 
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
@@ -179,7 +306,9 @@ export default function DashboardPage() {
                 className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 font-bold text-white transition hover:bg-slate-800 active:scale-[0.98] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
               >
                 <span>⚙️</span>
-                <span>Gestion des utilisateurs</span>
+                <span>
+                  Gestion des utilisateurs
+                </span>
               </Link>
             )}
 
